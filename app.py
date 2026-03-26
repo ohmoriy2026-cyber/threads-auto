@@ -109,30 +109,44 @@ if "api_keys" not in st.session_state:
 
 page = st.sidebar.radio("メニュー", ["1. ダッシュボード", "2. 商品作成＆予約", "4. API設定"])
 
+# --- 4. API設定（ロード後に再実行する処理を追加） ---
 if page == "4. API設定":
     st.title("⚙️ API設定")
     with st.expander("👤 管理者モード"):
         pw = st.text_input("合言葉", type="password", key="master_pw_input")
         if st.button("ロード", key="load_btn"):
             if pw == st.secrets.get("master_password", "admin123"):
+                # セッションステートにSecretsから値を代入
                 st.session_state["api_keys"] = {
-                    "rakuten_id": st.secrets.get("rakuten_id", ""), "rakuten_key": st.secrets.get("rakuten_key", ""),
-                    "gemini": st.secrets.get("gemini_key", ""), "threads": st.secrets.get("threads_token", ""),
-                    "sheet_id": st.secrets.get("sheet_id", ""), "g_json": st.secrets.get("g_json", "")
+                    "rakuten_id": st.secrets.get("rakuten_id", ""),
+                    "rakuten_key": st.secrets.get("rakuten_key", ""),
+                    "gemini": st.secrets.get("gemini_key", ""),
+                    "threads": st.secrets.get("threads_token", ""),
+                    "sheet_id": st.secrets.get("sheet_id", ""),
+                    "g_json": st.secrets.get("g_json", "")
                 }
                 st.success("ロード完了！")
+                time.sleep(1) # メッセージを見せるための短い待機
+                st.rerun() # 🌟 ここで画面を強制更新！これで下の欄に反映されます
+            else:
+                st.error("合言葉が違います")
 
     with st.container(border=True):
         api = st.session_state["api_keys"]
         c1, c2 = st.columns(2)
-        r_id = c1.text_input("楽天ID", value=api["rakuten_id"], type="password", key="ri_f")
-        r_key = c1.text_input("楽天Key", value=api["rakuten_key"], type="password", key="rk_f")
-        g_key = c1.text_input("Gemini", value=api["gemini"], type="password", key="gk_f")
-        t_tok = c2.text_input("Threads", value=api["threads"], type="password", key="tt_f")
-        s_id = c2.text_input("Sheet ID", value=api["sheet_id"], key="si_f")
-        g_js = c2.text_area("JSON", value=api["g_json"], height=100, key="gj_f")
+        # 🌟 value=api["xxx"] が st.rerun() によって正しく表示されるようになります
+        r_id = c1.text_input("楽天ID", value=api.get("rakuten_id", ""), type="password", key="ri_f")
+        r_key = c1.text_input("楽天Key", value=api.get("rakuten_key", ""), type="password", key="rk_f")
+        g_key = c1.text_input("Gemini", value=api.get("gemini", ""), type="password", key="gk_f")
+        t_tok = c2.text_input("Threads", value=api.get("threads", ""), type="password", key="tt_f")
+        s_id = c2.text_input("Sheet ID", value=api.get("sheet_id", ""), key="si_f")
+        g_js = c2.text_area("JSON", value=api.get("g_json", ""), height=100, key="gj_f")
+        
         if st.button("設定を保存", key="save_final_btn"):
-            st.session_state["api_keys"].update({"rakuten_id":r_id, "rakuten_key":r_key, "gemini":g_key, "threads":t_tok, "sheet_id":s_id, "g_json":g_js})
+            st.session_state["api_keys"].update({
+                "rakuten_id": r_id, "rakuten_key": r_key, "gemini": g_key, 
+                "threads": t_tok, "sheet_id": s_id, "g_json": g_js
+            })
             st.success("保存しました！")
 
 elif page == "2. 商品作成＆予約":
