@@ -7,7 +7,7 @@ from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
 import json
-import pandas as pd # グラフとランキング計算用にPandasを追加
+import pandas as pd
 
 # ==========================================
 # 🎨 デザイン・カスタムCSS
@@ -33,7 +33,6 @@ st.markdown("""
     .stButton>button { background-color: #00E5FF !important; color: #000000 !important; font-weight: bold; border-radius: 8px; width: 100%; border: none; }
     [data-testid="stDataFrame"] { background-color: #000000 !important; border-radius: 8px; }
     
-    /* ランキング用特別CSS */
     .ranking-box {
         background-color: #121214;
         border: 1px solid #00E5FF;
@@ -79,9 +78,7 @@ def get_sheet_data(sheet_id, g_json):
     except: return []
 
 def get_threads_engagement(token):
-    """🌟 閲覧数(views)を追加取得するように強化"""
     if not token: return []
-    # fieldsに views を追加
     url = f"https://graph.threads.net/v1.0/me/threads?fields=id,text,like_count,reply_count,views,timestamp&limit=100&access_token={token}"
     try:
         res = requests.get(url).json()
@@ -126,7 +123,7 @@ if "api_keys" not in st.session_state:
 page = st.sidebar.radio("メニュー", ["1. ダッシュボード", "2. 商品作成＆予約", "4. API設定"])
 
 # ------------------------------------------
-# 📊 1. ダッシュボードページ (大改修版)
+# 📊 1. ダッシュボードページ
 # ------------------------------------------
 if page == "1. ダッシュボード":
     st.title("📊 アナリティクス・ダッシュボード")
@@ -140,25 +137,31 @@ if page == "1. ダッシュボード":
         threads_data = get_threads_engagement(api["threads"])
         
         if threads_data:
-            # 🌟 計算用にPandas DataFrameに変換
             df = pd.DataFrame(threads_data)
+            
+            # 🌟 エラー回避策：列が存在しない場合は「0」または「空」で作る
+            for col in ['like_count', 'reply_count', 'views']:
+                if col not in df.columns:
+                    df[col] = 0
+            if 'text' not in df.columns:
+                df['text'] = ""
+            if 'timestamp' not in df.columns:
+                df['timestamp'] = datetime.now().isoformat()
+
             # 数値型に変換
             df['like_count'] = pd.to_numeric(df['like_count'], errors='coerce').fillna(0).astype(int)
             df['reply_count'] = pd.to_numeric(df['reply_count'], errors='coerce').fillna(0).astype(int)
-            # 🌟 閲覧数(views)を数値化
             df['views'] = pd.to_numeric(df['views'], errors='coerce').fillna(0).astype(int)
-            # 🌟 日付型に変換して日付のみ抽出
             df['timestamp'] = pd.to_datetime(df['timestamp']).dt.date
             
-            # 🌟 累計データの計算
+            # 累計データの計算
             total_likes = df['like_count'].sum()
             total_replies = df['reply_count'].sum()
-            total_views = df['views'].sum() # 累計閲覧数
+            total_views = df['views'].sum()
             
-            # メトリクス表示
             ec1, ec2, ec3, ec4 = st.columns(4)
             with ec1: st.metric("📝 対象投稿数", f"{len(threads_data)} 件")
-            with ec2: st.metric("👀 累計閲覧数", f"{total_views:,} 回") # カンマ区切り
+            with ec2: st.metric("👀 累計閲覧数", f"{total_views:,} 回")
             with ec3: st.metric("❤️ 累計いいね数", f"{total_likes:,} 回")
             with ec4: st.metric("💬 累計コメント数", f"{total_replies:,} 件")
 
@@ -166,9 +169,7 @@ if page == "1. ダッシュボード":
 
             # --- 🏆 エンゲージメント トップ5 ---
             st.subheader("🏆 反響が大きかった投稿 トップ5")
-            # 🌟 総エンゲージメント（いいね + 返信）の列を追加
             df['total_eng'] = df['like_count'] + df['reply_count']
-            # 🌟 総エンゲージメント順に並び替えて、上位5件を取得
             top5_df = df.sort_values(by='total_eng', ascending=False).head(5)
 
             for i, row in top5_df.iterrows():
@@ -188,9 +189,7 @@ if page == "1. ダッシュボード":
 
             # --- 📈 グラフ：日別エンゲージメント推移 ---
             st.subheader("📈 日別エンゲージメント推移 (いいね + 返信)")
-            # 🌟 日付ごとに集計
             daily_eng = df.groupby('timestamp')[['like_count', 'reply_count']].sum()
-            # 🌟 グラフを表示
             st.line_chart(daily_eng)
 
         else:
