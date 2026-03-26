@@ -2,3 +2,5 @@ streamlit
 google-genai
 requests
 Pillow
+gspread
+google-auth
