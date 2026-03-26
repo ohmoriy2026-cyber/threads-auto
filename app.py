@@ -15,14 +15,57 @@ st.set_page_config(page_title="Threads Marketing Pro", layout="wide")
 
 st.markdown("""
 <style>
+    /* ページ全体の背景 */
     .stApp, .main { background-color: #1A1A1D !important; }
+
+    /* サイドバーのデザイン */
     [data-testid="stSidebar"] { background-color: #242429 !important; border-right: 1px solid #3A3A40; }
-    [data-testid="stVerticalBlockBorderWrapper"] { background-color: #2A2A30 !important; border: 1px solid #4A4A55 !important; border-radius: 12px; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2); }
-    .stTextInput div[data-baseweb="input"], .stTextArea div[data-baseweb="textarea"] { background-color: rgba(255, 255, 255, 0.15) !important; border: 1px solid rgba(255, 255, 255, 0.4) !important; border-radius: 8px; }
-    .stTextInput input, .stTextArea textarea { color: #FFFFFF !important; }
+
+    /* 各ブロックの枠（STEPごと） */
+    [data-testid="stVerticalBlockBorderWrapper"] { 
+        background-color: #26262B !important; 
+        border: 1px solid #3A3A40 !important; 
+        border-radius: 12px; 
+        padding: 20px;
+    }
+
+    /* 🌟 【ここを修正】入力欄（テキストボックス・エリア）のデザイン */
+    .stTextInput div[data-baseweb="input"], .stTextArea div[data-baseweb="textarea"] {
+        background-color: #121214 !important; /* 真っ白から深い黒に変更 */
+        border: 1px solid #4A4A55 !important; /* 控えめな枠線 */
+        border-radius: 8px;
+        color: #FFFFFF !important;
+    }
+    
+    /* 入力欄にカーソルを合わせた時の色（Cyan） */
+    .stTextInput div[data-baseweb="input"]:focus-within, .stTextArea div[data-baseweb="textarea"]:focus-within {
+        border-color: #00E5FF !important;
+        box-shadow: 0 0 0 1px #00E5FF !important;
+    }
+
+    /* 入力中の文字色 */
+    .stTextInput input, .stTextArea textarea {
+        color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important;
+    }
+
+    /* ラベル文字（項目名）の色 */
     .stMarkdown, .stText, h1, h2, h3, p, label { color: #F0F0F0 !important; }
-    .stButton>button { background-color: #00E5FF !important; color: #000000 !important; font-weight: bold; border-radius: 8px; border: none; transition: all 0.3s; width: 100%; }
-    .stButton>button:hover { background-color: #00B8CC !important; transform: scale(1.02); }
+
+    /* ボタンのデザイン */
+    .stButton>button { 
+        background-color: #00E5FF !important; 
+        color: #000000 !important; 
+        font-weight: bold; 
+        border-radius: 8px; 
+        border: none; 
+        transition: all 0.3s; 
+    }
+    .stButton>button:hover { 
+        background-color: #00B8CC !important; 
+        transform: scale(1.01);
+        box-shadow: 0 4px 15px rgba(0, 229, 255, 0.3);
+    }
 </style>
 """, unsafe_allow_html=True)
 
