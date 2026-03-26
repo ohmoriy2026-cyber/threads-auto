@@ -77,12 +77,11 @@ def get_threads_engagement(token):
         return res.get("data", [])
     except: return []
 
-# 🌟 アフィリエイトID（affiliate_id）を受け取れるように修正
 def get_rakuten_ranking(app_id, affiliate_id, genre_id):
     url = "https://openapi.rakuten.co.jp/ichibaranking/api/IchibaItem/Ranking/20220601"
     params = {"applicationId": app_id, "genreId": genre_id}
     if affiliate_id:
-        params["affiliateId"] = affiliate_id # アフィリエイトIDを付与
+        params["affiliateId"] = affiliate_id
         
     try:
         res = requests.get(url, params=params, headers={"Referer": "https://localhost/"})
@@ -113,7 +112,6 @@ def post_to_threads(access_token, text, reply_to_id=None, image_url=None):
 # ==========================================
 # 🖥️ メイン画面構成
 # ==========================================
-# 🌟 セッションに rakuten_aff_id を追加
 if "api_keys" not in st.session_state:
     st.session_state["api_keys"] = {"rakuten_id":"", "rakuten_aff_id":"", "gemini":"", "threads":"", "sheet_id":"", "g_json":""}
 
@@ -209,11 +207,52 @@ elif page == "2. 商品作成＆予約":
     if not api["rakuten_id"]: st.warning("API設定を先に済ませてください。")
     else:
         with st.container(border=True):
-            genres = {"総合": "0", "レディース": "100371", "メンズ": "551177", "美容": "100939", "食品": "100227", "家電": "562631"}
-            sel_name = st.selectbox("ジャンル", list(genres.keys()), key="sel_genre_p2")
+            # 🌟 全35ジャンル ＋ その他(ID指定) を完全復活！
+            genres_dict = {
+                "🏆 総合ランキング": "0",
+                "👗 レディースファッション": "100371",
+                "👔 メンズファッション": "551177",
+                "👜 バッグ・小物・ブランド雑貨": "216129",
+                "👟 靴": "558885",
+                "⌚ 腕時計": "558929",
+                "💎 ジュエリー・アクセサリー": "200162",
+                "💄 美容・コスメ・香水": "100939",
+                "💊 ダイエット・健康": "100143",
+                "🏥 医薬品・コンタクト・介護": "551169",
+                "🍎 食品": "100227",
+                "🍪 スイーツ・お菓子": "551167",
+                "🍹 水・ソフトドリンク": "100316",
+                "🍺 ビール・洋酒": "510915",
+                "🍶 日本酒・焼酎": "510901",
+                "🛋 インテリア・寝具・収納": "100804",
+                "🍳 キッチン・食器・調理器具": "558944",
+                "🧼 日用品・文房具・手芸": "215783",
+                "🔌 家電": "562631",
+                "📸 TV・オーディオ・カメラ": "211742",
+                "💻 パソコン・周辺機器": "100026",
+                "📱 スマフォ・タブレット": "562637",
+                "⚽ スポーツ・アウトドア": "101070",
+                "⛳ ゴルフ用品": "101077",
+                "🚗 車・バイク用品": "503190",
+                "🧸 おもちゃ": "101164",
+                "🎨 ホビー": "101165",
+                "🎸 楽器・音響機器": "112493",
+                "🐱 ペット・ペットグッズ": "101213",
+                "🍼 キッズ・ベビー・マタニティ": "100533",
+                "📚 本・雑誌・コミック": "200376",
+                "📀 CD・DVD": "101240",
+                "🎮 TVゲーム": "101205",
+                "🔧 その他 (ID指定)": "custom"
+            }
+            sel_name = st.selectbox("ランキングを取得したいジャンルを選択", list(genres_dict.keys()), key="sel_genre_p2")
+            
+            # 🌟 ID手動入力機能も復活！
+            target_id = genres_dict[sel_name]
+            if target_id == "custom":
+                target_id = st.text_input("楽天ジャンルIDを入力してください（例: 211742）", key="custom_id_in")
+
             if st.button("ランキング取得", key="get_rank_p2"):
-                # 🌟 アフィリエイトIDを渡してランキング取得
-                st.session_state["items"] = get_rakuten_ranking(api["rakuten_id"], api["rakuten_aff_id"], genres[sel_name])
+                st.session_state["items"] = get_rakuten_ranking(api["rakuten_id"], api["rakuten_aff_id"], target_id)
 
         if "items" in st.session_state:
             selected = []
@@ -251,7 +290,6 @@ elif page == "2. 商品作成＆予約":
         if "gen_res_p2" in st.session_state:
             for k, p in enumerate(st.session_state["gen_res_p2"]):
                 item = p["item"]
-                # 🌟 アフィリエイトURLがあればそれを、無ければ通常のURLを使う
                 target_url = item.get("affiliateUrl", item["itemUrl"])
                 
                 with st.expander(f"確認: {item['itemName'][:30]}", expanded=True):
@@ -271,7 +309,6 @@ elif page == "2. 商品作成＆予約":
                         d = st.date_input("予約日", key=f"d_in_{k}")
                         t = st.time_input("時間", key=f"t_in_{k}")
                         if st.button("🗓️ 予約リストに追加", key=f"reserve_final_btn_{k}"):
-                            # 🌟 リプライの内容を target_url に変更
                             row = ["", f_txt, d.strftime('%Y/%m/%d'), str(t.hour), str(t.minute), "pending", "", "", f"▼ 詳細はこちら\n{target_url}", item["mediumImageUrls"][0]["imageUrl"] if use_img else ""]
                             if save_to_sheets(api["sheet_id"], api["g_json"], row):
                                 st.balloons()
@@ -290,7 +327,7 @@ elif page == "4. API設定":
                 st.error("❌ Streamlit CloudのSecretsに master_password がありません。")
             elif pw == secret_pw:
                 st.session_state["f_ri"] = st.secrets.get("rakuten_id", "")
-                st.session_state["f_ra"] = st.secrets.get("rakuten_aff_id", "") # 🌟 追加
+                st.session_state["f_ra"] = st.secrets.get("rakuten_aff_id", "")
                 st.session_state["f_gk"] = st.secrets.get("gemini_key", "")
                 st.session_state["f_tt"] = st.secrets.get("threads_token", "")
                 st.session_state["f_si"] = st.secrets.get("sheet_id", "")
@@ -302,7 +339,7 @@ elif page == "4. API設定":
     with st.container(border=True):
         c1, c2 = st.columns(2)
         r_id = c1.text_input("楽天 App ID", type="password", key="f_ri")
-        r_aff = c1.text_input("楽天 アフィリエイトID (任意)", type="password", key="f_ra", help="未入力の場合は通常リンクになります。") # 🌟 追加
+        r_aff = c1.text_input("楽天 アフィリエイトID (任意)", type="password", key="f_ra", help="未入力の場合は通常リンクになります。")
         g_key = c1.text_input("Gemini", type="password", key="f_gk")
         t_tok = c2.text_input("Threads", type="password", key="f_tt")
         s_id = c2.text_input("Sheet ID", key="f_si")
