@@ -75,19 +75,24 @@ def get_threads_engagement(token):
         return res.get("data", [])
     except: return []
 
-# 🌟 エラーが画面に出るように、そして公式最新URLに修正しました
-def get_rakuten_ranking(app_id, affiliate_id, genre_id):
-    if not app_id:
-        st.error("楽天 App ID が設定されていません。API設定を確認してください。")
+# 🌟 新APIエンドポイントと「Access Key」を完全復活させました
+def get_rakuten_ranking(app_id, access_key, affiliate_id, genre_id):
+    if not app_id or not access_key:
+        st.error("楽天 App ID または Access Key が設定されていません。")
         return []
         
-    url = "https://app.rakuten.co.jp/services/api/IchibaItem/Ranking/20220601"
-    params = {"applicationId": str(app_id).strip(), "genreId": str(genre_id).strip()}
+    # 最新APIの正しいURL（UUID対応版）
+    url = "https://openapi.rakuten.co.jp/ichibaranking/api/IchibaItem/Ranking/20220601"
+    params = {
+        "applicationId": str(app_id).strip(),
+        "accessKey": str(access_key).strip(),
+        "genreId": str(genre_id).strip()
+    }
     if affiliate_id and str(affiliate_id).strip():
         params["affiliateId"] = str(affiliate_id).strip()
         
     try:
-        res = requests.get(url, params=params)
+        res = requests.get(url, params=params, headers={"Referer": "https://localhost/"})
         if res.status_code != 200:
             st.error(f"❌ 楽天APIエラー ({res.status_code}): {res.text}")
             return []
@@ -121,7 +126,10 @@ def post_to_threads(access_token, text, reply_to_id=None, image_url=None):
 # 🖥️ メイン画面構成
 # ==========================================
 if "api_keys" not in st.session_state:
-    st.session_state["api_keys"] = {"rakuten_id":"", "rakuten_aff_id":"", "gemini":"", "threads":"", "sheet_id":"", "g_json":""}
+    st.session_state["api_keys"] = {
+        "rakuten_id": "", "rakuten_key": "", "rakuten_aff_id": "", 
+        "gemini": "", "threads": "", "sheet_id": "", "g_json": ""
+    }
 
 page = st.sidebar.radio("メニュー", ["1. ダッシュボード", "2. 商品作成＆予約", "4. API設定"])
 
@@ -236,7 +244,8 @@ elif page == "2. 商品作成＆予約":
                 target_id = st.text_input("楽天ジャンルIDを入力してください（例: 211742）", key="custom_id_in")
 
             if st.button("ランキング取得", key="get_rank_p2"):
-                st.session_state["items"] = get_rakuten_ranking(api["rakuten_id"], api["rakuten_aff_id"], target_id)
+                # 🌟 access_key を渡すように修正！
+                st.session_state["items"] = get_rakuten_ranking(api["rakuten_id"], api["rakuten_key"], api["rakuten_aff_id"], target_id)
 
         if "items" in st.session_state:
             selected = []
@@ -311,6 +320,7 @@ elif page == "4. API設定":
                 st.error("❌ Streamlit CloudのSecretsに master_password がありません。")
             elif pw == secret_pw:
                 st.session_state["f_ri"] = st.secrets.get("rakuten_id", "")
+                st.session_state["f_rk"] = st.secrets.get("rakuten_key", "") # 🌟 Access Key 復活！
                 st.session_state["f_ra"] = st.secrets.get("rakuten_aff_id", "")
                 st.session_state["f_gk"] = st.secrets.get("gemini_key", "")
                 st.session_state["f_tt"] = st.secrets.get("threads_token", "")
@@ -323,15 +333,18 @@ elif page == "4. API設定":
     with st.container(border=True):
         c1, c2 = st.columns(2)
         r_id = c1.text_input("楽天 App ID", type="password", key="f_ri")
+        r_key = c1.text_input("楽天 Access Key", type="password", key="f_rk") # 🌟 Access Key 復活！
         r_aff = c1.text_input("楽天 アフィリエイトID (任意)", type="password", key="f_ra", help="未入力の場合は通常リンクになります。")
-        g_key = c1.text_input("Gemini", type="password", key="f_gk")
-        t_tok = c2.text_input("Threads", type="password", key="f_tt")
+        
+        g_key = c2.text_input("Gemini API", type="password", key="f_gk")
+        t_tok = c2.text_input("Threads Token", type="password", key="f_tt")
         s_id = c2.text_input("Sheet ID", key="f_si")
-        g_js = c2.text_area("JSON", height=100, key="f_gj")
+        
+        g_js = st.text_area("JSON", height=100, key="f_gj")
         
         if st.button("設定を保存", key="f_save_btn"):
             st.session_state["api_keys"].update({
-                "rakuten_id":r_id, "rakuten_aff_id":r_aff, "gemini":g_key, 
-                "threads":t_tok, "sheet_id":s_id, "g_json":g_js
+                "rakuten_id":r_id, "rakuten_key":r_key, "rakuten_aff_id":r_aff, 
+                "gemini":g_key, "threads":t_tok, "sheet_id":s_id, "g_json":g_js
             })
             st.success("設定を保存しました！商品作成ページへ進んでください。")
