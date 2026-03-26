@@ -34,17 +34,9 @@ st.markdown("""
     [data-testid="stDataFrame"] { background-color: #000000 !important; border-radius: 8px; }
     
     .ranking-box {
-        background-color: #121214;
-        border: 1px solid #00E5FF;
-        border-radius: 10px;
-        padding: 15px;
-        margin-bottom: 10px;
+        background-color: #121214; border: 1px solid #00E5FF; border-radius: 10px; padding: 15px; margin-bottom: 10px;
     }
-    .ranking-rank {
-        font-size: 24px;
-        font-weight: bold;
-        color: #00E5FF;
-    }
+    .ranking-rank { font-size: 24px; font-weight: bold; color: #00E5FF; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -85,9 +77,13 @@ def get_threads_engagement(token):
         return res.get("data", [])
     except: return []
 
-def get_rakuten_ranking(app_id, access_key, genre_id):
+# 🌟 アフィリエイトID（affiliate_id）を受け取れるように修正
+def get_rakuten_ranking(app_id, affiliate_id, genre_id):
     url = "https://openapi.rakuten.co.jp/ichibaranking/api/IchibaItem/Ranking/20220601"
-    params = {"applicationId": app_id, "accessKey": access_key, "genreId": genre_id}
+    params = {"applicationId": app_id, "genreId": genre_id}
+    if affiliate_id:
+        params["affiliateId"] = affiliate_id # アフィリエイトIDを付与
+        
     try:
         res = requests.get(url, params=params, headers={"Referer": "https://localhost/"})
         return [item["Item"] for item in res.json().get("Items", [])[:10]]
@@ -117,8 +113,9 @@ def post_to_threads(access_token, text, reply_to_id=None, image_url=None):
 # ==========================================
 # 🖥️ メイン画面構成
 # ==========================================
+# 🌟 セッションに rakuten_aff_id を追加
 if "api_keys" not in st.session_state:
-    st.session_state["api_keys"] = {"rakuten_id":"", "rakuten_key":"", "gemini":"", "threads":"", "sheet_id":"", "g_json":""}
+    st.session_state["api_keys"] = {"rakuten_id":"", "rakuten_aff_id":"", "gemini":"", "threads":"", "sheet_id":"", "g_json":""}
 
 page = st.sidebar.radio("メニュー", ["1. ダッシュボード", "2. 商品作成＆予約", "4. API設定"])
 
@@ -132,29 +129,21 @@ if page == "1. ダッシュボード":
     if not api["sheet_id"] or not api["threads"]:
         st.info("💡 API設定でロードを行うと、ここにアナリティクスが表示されます。")
     else:
-        # --- Threadsエンゲージメント分析 ---
         st.subheader("❤️ Threads エンゲージメント集計 (過去100件)")
         threads_data = get_threads_engagement(api["threads"])
         
         if threads_data:
             df = pd.DataFrame(threads_data)
-            
-            # 🌟 エラー回避策：列が存在しない場合は「0」または「空」で作る
             for col in ['like_count', 'reply_count', 'views']:
-                if col not in df.columns:
-                    df[col] = 0
-            if 'text' not in df.columns:
-                df['text'] = ""
-            if 'timestamp' not in df.columns:
-                df['timestamp'] = datetime.now().isoformat()
+                if col not in df.columns: df[col] = 0
+            if 'text' not in df.columns: df['text'] = ""
+            if 'timestamp' not in df.columns: df['timestamp'] = datetime.now().isoformat()
 
-            # 数値型に変換
             df['like_count'] = pd.to_numeric(df['like_count'], errors='coerce').fillna(0).astype(int)
             df['reply_count'] = pd.to_numeric(df['reply_count'], errors='coerce').fillna(0).astype(int)
             df['views'] = pd.to_numeric(df['views'], errors='coerce').fillna(0).astype(int)
             df['timestamp'] = pd.to_datetime(df['timestamp']).dt.date
             
-            # 累計データの計算
             total_likes = df['like_count'].sum()
             total_replies = df['reply_count'].sum()
             total_views = df['views'].sum()
@@ -167,7 +156,6 @@ if page == "1. ダッシュボード":
 
             st.divider()
 
-            # --- 🏆 エンゲージメント トップ5 ---
             st.subheader("🏆 反響が大きかった投稿 トップ5")
             df['total_eng'] = df['like_count'] + df['reply_count']
             top5_df = df.sort_values(by='total_eng', ascending=False).head(5)
@@ -187,17 +175,15 @@ if page == "1. ダッシュボード":
             
             st.divider()
 
-            # --- 📈 グラフ：日別エンゲージメント推移 ---
             st.subheader("📈 日別エンゲージメント推移 (いいね + 返信)")
             daily_eng = df.groupby('timestamp')[['like_count', 'reply_count']].sum()
             st.line_chart(daily_eng)
 
         else:
-            st.info("Threadsからデータを取得できませんでした。投稿が少ないか、APIキーの問題です。")
+            st.info("Threadsからデータを取得できませんでした。")
 
         st.divider()
 
-        # --- ⚙️ 稼働状況（スプレッドシート連動） ---
         st.subheader("⚙️ 自動投稿の待機状況")
         sheet_data = get_sheet_data(api["sheet_id"], api["g_json"])
         if sheet_data:
@@ -213,9 +199,8 @@ if page == "1. ダッシュボード":
         else:
             st.warning("スプレッドシートの待機データを取得できませんでした。")
 
-
 # ------------------------------------------
-# (以下、2. 商品作成＆予約、4. API設定ページは前回と同様)
+# 🛒 2. 商品作成＆予約ページ
 # ------------------------------------------
 elif page == "2. 商品作成＆予約":
     st.title("🛒 商品作成 ＆ 予約")
@@ -227,7 +212,8 @@ elif page == "2. 商品作成＆予約":
             genres = {"総合": "0", "レディース": "100371", "メンズ": "551177", "美容": "100939", "食品": "100227", "家電": "562631"}
             sel_name = st.selectbox("ジャンル", list(genres.keys()), key="sel_genre_p2")
             if st.button("ランキング取得", key="get_rank_p2"):
-                st.session_state["items"] = get_rakuten_ranking(api["rakuten_id"], api["rakuten_key"], genres[sel_name])
+                # 🌟 アフィリエイトIDを渡してランキング取得
+                st.session_state["items"] = get_rakuten_ranking(api["rakuten_id"], api["rakuten_aff_id"], genres[sel_name])
 
         if "items" in st.session_state:
             selected = []
@@ -265,6 +251,9 @@ elif page == "2. 商品作成＆予約":
         if "gen_res_p2" in st.session_state:
             for k, p in enumerate(st.session_state["gen_res_p2"]):
                 item = p["item"]
+                # 🌟 アフィリエイトURLがあればそれを、無ければ通常のURLを使う
+                target_url = item.get("affiliateUrl", item["itemUrl"])
+                
                 with st.expander(f"確認: {item['itemName'][:30]}", expanded=True):
                     f_txt = st.text_area("本文", value=p["text"], key=f"final_txt_{k}", height=150)
                     use_img = st.checkbox("画像あり", value=True, key=f"use_img_{k}")
@@ -275,18 +264,22 @@ elif page == "2. 商品作成＆予約":
                         mid = post_to_threads(api["threads"], f_txt, image_url=i_url)
                         if mid:
                             time.sleep(5)
-                            post_to_threads(api["threads"], f"▼ 詳細はこちら\n{item['itemUrl']}", reply_to_id=mid)
+                            post_to_threads(api["threads"], f"▼ 詳細はこちら\n{target_url}", reply_to_id=mid)
                             st.success("成功！")
                     
                     with c_sch:
                         d = st.date_input("予約日", key=f"d_in_{k}")
                         t = st.time_input("時間", key=f"t_in_{k}")
                         if st.button("🗓️ 予約リストに追加", key=f"reserve_final_btn_{k}"):
-                            row = ["", f_txt, d.strftime('%Y/%m/%d'), str(t.hour), str(t.minute), "pending", "", "", f"▼ 詳細はこちら\n{item['itemUrl']}", item["mediumImageUrls"][0]["imageUrl"] if use_img else ""]
+                            # 🌟 リプライの内容を target_url に変更
+                            row = ["", f_txt, d.strftime('%Y/%m/%d'), str(t.hour), str(t.minute), "pending", "", "", f"▼ 詳細はこちら\n{target_url}", item["mediumImageUrls"][0]["imageUrl"] if use_img else ""]
                             if save_to_sheets(api["sheet_id"], api["g_json"], row):
                                 st.balloons()
                                 st.success(f"✅ 保存しました！ ({d} {t})")
 
+# ------------------------------------------
+# ⚙️ 4. API設定ページ
+# ------------------------------------------
 elif page == "4. API設定":
     st.title("⚙️ API設定")
     with st.expander("👤 管理者モード", expanded=True):
@@ -297,7 +290,7 @@ elif page == "4. API設定":
                 st.error("❌ Streamlit CloudのSecretsに master_password がありません。")
             elif pw == secret_pw:
                 st.session_state["f_ri"] = st.secrets.get("rakuten_id", "")
-                st.session_state["f_rk"] = st.secrets.get("rakuten_key", "")
+                st.session_state["f_ra"] = st.secrets.get("rakuten_aff_id", "") # 🌟 追加
                 st.session_state["f_gk"] = st.secrets.get("gemini_key", "")
                 st.session_state["f_tt"] = st.secrets.get("threads_token", "")
                 st.session_state["f_si"] = st.secrets.get("sheet_id", "")
@@ -308,13 +301,16 @@ elif page == "4. API設定":
 
     with st.container(border=True):
         c1, c2 = st.columns(2)
-        r_id = c1.text_input("楽天ID", type="password", key="f_ri")
-        r_key = c1.text_input("楽天Key", type="password", key="f_rk")
+        r_id = c1.text_input("楽天 App ID", type="password", key="f_ri")
+        r_aff = c1.text_input("楽天 アフィリエイトID (任意)", type="password", key="f_ra", help="未入力の場合は通常リンクになります。") # 🌟 追加
         g_key = c1.text_input("Gemini", type="password", key="f_gk")
         t_tok = c2.text_input("Threads", type="password", key="f_tt")
         s_id = c2.text_input("Sheet ID", key="f_si")
         g_js = c2.text_area("JSON", height=100, key="f_gj")
         
         if st.button("設定を保存", key="f_save_btn"):
-            st.session_state["api_keys"].update({"rakuten_id":r_id, "rakuten_key":r_key, "gemini":g_key, "threads":t_tok, "sheet_id":s_id, "g_json":g_js})
+            st.session_state["api_keys"].update({
+                "rakuten_id":r_id, "rakuten_aff_id":r_aff, "gemini":g_key, 
+                "threads":t_tok, "sheet_id":s_id, "g_json":g_js
+            })
             st.success("設定を保存しました！商品作成ページへ進んでください。")
