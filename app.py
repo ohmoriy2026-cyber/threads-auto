@@ -30,11 +30,14 @@ st.markdown("""
     ::placeholder { color: #888888 !important; }
     label, p, h1, h2, h3, .stMarkdown { color: #F0F0F0 !important; font-weight: bold; }
     .stButton>button { background-color: #00E5FF !important; color: #000000 !important; font-weight: bold; border-radius: 8px; width: 100%; border: none; }
+    
+    /* データフレーム（表）のデザイン調整 */
+    [data-testid="stDataFrame"] { background-color: #000000 !important; border-radius: 8px; }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# ⚙️ 関数群
+# ⚙️ 関数群（ダッシュボード用データ取得を含む）
 # ==========================================
 def save_to_sheets(sheet_id, g_json, row_data):
     if not sheet_id or not g_json: return False
@@ -48,6 +51,32 @@ def save_to_sheets(sheet_id, g_json, row_data):
     except Exception as e:
         st.error(f"スプレッドシートエラー: {e}")
         return False
+
+def get_sheet_data(sheet_id, g_json):
+    """ダッシュボード用にスプレッドシートの全データを取得"""
+    if not sheet_id or not g_json: return []
+    try:
+        creds_dict = json.loads(g_json)
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        client = gspread.authorize(creds)
+        data = client.open_by_key(sheet_id).sheet1.get_all_values()
+        if len(data) < 2: return []
+        headers = data[0]
+        # 空の行を除外して辞書型のリストに変換
+        return [dict(zip(headers, row)) for row in data[1:] if any(row)]
+    except:
+        return []
+
+def get_threads_engagement(token):
+    """ダッシュボード用にThreadsのエンゲージメントを取得"""
+    if not token: return []
+    url = f"https://graph.threads.net/v1.0/me/threads?fields=id,text,like_count,reply_count,timestamp&access_token={token}"
+    try:
+        res = requests.get(url).json()
+        return res.get("data", [])
+    except:
+        return []
 
 def get_rakuten_ranking(app_id, access_key, genre_id):
     url = "https://openapi.rakuten.co.jp/ichibaranking/api/IchibaItem/Ranking/20220601"
@@ -79,117 +108,14 @@ def post_to_threads(access_token, text, reply_to_id=None, image_url=None):
     return None
 
 # ==========================================
-# 🖥️ メイン画面
+# 🖥️ メイン画面構成
 # ==========================================
 if "api_keys" not in st.session_state:
     st.session_state["api_keys"] = {"rakuten_id":"", "rakuten_key":"", "gemini":"", "threads":"", "sheet_id":"", "g_json":""}
 
 page = st.sidebar.radio("メニュー", ["1. ダッシュボード", "2. 商品作成＆予約", "4. API設定"])
 
-if page == "4. API設定":
-    st.title("⚙️ API設定")
-    with st.expander("👤 管理者モード", expanded=True):
-        pw = st.text_input("合言葉", type="password", key="master_pw_input")
-        if st.button("ロード", key="load_btn"):
-            # 🌟 エラー原因を特定しやすくしました
-            secret_pw = st.secrets.get("master_password")
-            if not secret_pw:
-                st.error("❌ Streamlit CloudのSecretsに `master_password` が登録されていません。")
-            elif pw == secret_pw:
-                # 🌟 入力欄を直接強制上書きする魔法
-                st.session_state["f_ri"] = st.secrets.get("rakuten_id", "")
-                st.session_state["f_rk"] = st.secrets.get("rakuten_key", "")
-                st.session_state["f_gk"] = st.secrets.get("gemini_key", "")
-                st.session_state["f_tt"] = st.secrets.get("threads_token", "")
-                st.session_state["f_si"] = st.secrets.get("sheet_id", "")
-                st.session_state["f_gj"] = st.secrets.get("g_json", "")
-                st.success("✅ ロード成功！下の入力欄に反映されました。「設定を保存」を押してください。")
-            else:
-                st.error("❌ 合言葉が違います")
-
-    with st.container(border=True):
-        c1, c2 = st.columns(2)
-        # 🌟 keyを指定することで自動的に値が反映されます
-        r_id = c1.text_input("楽天ID", type="password", key="f_ri")
-        r_key = c1.text_input("楽天Key", type="password", key="f_rk")
-        g_key = c1.text_input("Gemini", type="password", key="f_gk")
-        t_tok = c2.text_input("Threads", type="password", key="f_tt")
-        s_id = c2.text_input("Sheet ID", key="f_si")
-        g_js = c2.text_area("JSON", height=100, key="f_gj")
-        
-        if st.button("設定を保存", key="f_save_btn"):
-            st.session_state["api_keys"].update({"rakuten_id":r_id, "rakuten_key":r_key, "gemini":g_key, "threads":t_tok, "sheet_id":s_id, "g_json":g_js})
-            st.success("設定を保存しました！商品作成ページへ進んでください。")
-
-elif page == "2. 商品作成＆予約":
-    st.title("🛒 商品作成 ＆ 予約")
-    api = st.session_state["api_keys"]
-    
-    if not api["rakuten_id"]: st.warning("API設定を先に済ませてください。")
-    else:
-        with st.container(border=True):
-            genres = {"総合": "0", "レディース": "100371", "メンズ": "551177", "美容": "100939", "食品": "100227", "家電": "562631"}
-            sel_name = st.selectbox("ジャンル", list(genres.keys()), key="sel_genre_p2")
-            if st.button("ランキング取得", key="get_rank_p2"):
-                st.session_state["items"] = get_rakuten_ranking(api["rakuten_id"], api["rakuten_key"], genres[sel_name])
-
-        if "items" in st.session_state:
-            selected = []
-            for i, item in enumerate(st.session_state["items"]):
-                with st.container(border=True):
-                    c1, c2 = st.columns([1, 4])
-                    c1.image(item["mediumImageUrls"][0]["imageUrl"])
-                    c2.write(f"**{item['itemName'][:50]}...**")
-                    if c2.checkbox("選ぶ", key=f"sel_chk_{i}"):
-                        item["u_img"] = c2.file_uploader("画像", type=["jpg","png"], key=f"u_f_{i}")
-                        selected.append(item)
-            
-            if selected:
-                st.divider()
-                with st.container(border=True):
-                    st.subheader("ターゲット・文章設定")
-                    c1, c2, c3 = st.columns(3)
-                    with c1: gender = st.radio("性別", ["女性", "男性", "指定なし"], key="r_gen")
-                    with c2: age = st.multiselect("年代", ["10代", "20代", "30代", "40代", "50代〜"], default=["20代", "30代"], key="m_age")
-                    with c3: kids = st.radio("子供", ["なし", "未就学児", "小学生"], key="r_kids")
-                    tone = st.selectbox("トーン", ["エモい", "役立つ", "元気"], key="s_tone")
-                    length = st.slider("文字数", 50, 500, 150, step=10, key="s_len")
-                    
-                    if st.button(f"✨ {len(selected)}件の文章を生成", key="gen_btn_p2"):
-                        t_str = f"{gender}, 年代:{','.join(age)}, 子供:{kids}"
-                        res = []
-                        pb = st.progress(0)
-                        for j, s_item in enumerate(selected):
-                            img_obj = Image.open(s_item["u_img"]) if s_item["u_img"] else None
-                            txt = generate_post_text(s_item["itemName"], s_item["itemPrice"], t_str, tone, length, api["gemini"], img_obj)
-                            res.append({"item": s_item, "text": txt})
-                            pb.progress((j+1)/len(selected))
-                        st.session_state["gen_res_p2"] = res
-
-        if "gen_res_p2" in st.session_state:
-            for k, p in enumerate(st.session_state["gen_res_p2"]):
-                item = p["item"]
-                with st.expander(f"確認: {item['itemName'][:30]}", expanded=True):
-                    f_txt = st.text_area("本文", value=p["text"], key=f"final_txt_{k}", height=150)
-                    use_img = st.checkbox("画像あり", value=True, key=f"use_img_{k}")
-                    
-                    c_now, c_sch = st.columns(2)
-                    if c_now.button("🚀 即時投稿", key=f"btn_now_{k}"):
-                        i_url = item["mediumImageUrls"][0]["imageUrl"] if use_img else None
-                        mid = post_to_threads(api["threads"], f_txt, image_url=i_url)
-                        if mid:
-                            time.sleep(5)
-                            post_to_threads(api["threads"], f"▼ 詳細はこちら\n{item['itemUrl']}", reply_to_id=mid)
-                            st.success("成功！")
-                    
-                    with c_sch:
-                        d = st.date_input("予約日", key=f"d_in_{k}")
-                        t = st.time_input("時間", key=f"t_in_{k}")
-                        if st.button("🗓️ 予約リストに追加", key=f"reserve_final_btn_{k}"):
-                            row = ["", f_txt, d.strftime('%Y/%m/%d'), str(t.hour), str(t.minute), "pending", "", "", f"▼ 詳細はこちら\n{item['itemUrl']}", item["mediumImageUrls"][0]["imageUrl"] if use_img else ""]
-                            if save_to_sheets(api["sheet_id"], api["g_json"], row):
-                                st.balloons()
-                                st.success(f"✅ 保存しました！ ({d} {t})")
-
-elif page == "1. ダッシュボード":
-    st.title("📊 ダッシュボード")
+# ------------------------------------------
+# 📊 1. ダッシュボードページ
+# ------------------------------------------
+if page == "1. ダッシュボード":
