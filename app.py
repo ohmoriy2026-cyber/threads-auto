@@ -9,16 +9,17 @@ from google.oauth2.service_account import Credentials
 import json
 
 # ==========================================
-# 🎨 デザイン・カスタムCSS (入力欄を見やすく調整)
+# 🎨 デザイン・カスタムCSS（すべての入力欄をダークに）
 # ==========================================
 st.set_page_config(page_title="Threads Marketing Pro", layout="wide")
 
 st.markdown("""
 <style>
+    /* ページ全体 */
     .stApp, .main { background-color: #1A1A1D !important; }
     [data-testid="stSidebar"] { background-color: #242429 !important; border-right: 1px solid #3A3A40; }
     
-    /* ブロックの枠 */
+    /* 枠組み */
     [data-testid="stVerticalBlockBorderWrapper"] { 
         background-color: #26262B !important; 
         border: 1px solid #3A3A40 !important; 
@@ -26,24 +27,24 @@ st.markdown("""
         padding: 20px;
     }
 
-    /* 🌟 入力欄のデザイン（視認性向上） */
-    .stTextInput div[data-baseweb="input"], .stTextArea div[data-baseweb="textarea"] {
+    /* 🌟 全ての入力欄（テキスト、エリア、日付、時間、セレクトボックス）をダークに */
+    div[data-baseweb="input"], 
+    div[data-baseweb="textarea"], 
+    div[data-baseweb="select"],
+    div[data-baseweb="base-input"] {
         background-color: #121214 !important;
         border: 1px solid #4A4A55 !important;
-        border-radius: 8px;
+        border-radius: 8px !important;
     }
     
-    .stTextInput div[data-baseweb="input"]:focus-within, .stTextArea div[data-baseweb="textarea"]:focus-within {
-        border-color: #00E5FF !important;
-    }
-
-    .stTextInput input, .stTextArea textarea {
+    /* 入力中の文字色を白で固定 */
+    input, textarea, span, div {
         color: #FFFFFF !important;
         -webkit-text-fill-color: #FFFFFF !important;
     }
 
-    /* 文字色 */
-    .stMarkdown, .stText, h1, h2, h3, p, label { color: #F0F0F0 !important; }
+    /* ラベルの色 */
+    label, p, h1, h2, h3 { color: #F0F0F0 !important; }
 
     /* ボタン */
     .stButton>button { 
@@ -57,7 +58,6 @@ st.markdown("""
     .stButton>button:hover { 
         background-color: #00B8CC !important; 
         transform: scale(1.01);
-        box-shadow: 0 4px 15px rgba(0, 229, 255, 0.3);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -79,7 +79,7 @@ def get_rakuten_ranking(app_id, access_key, genre_id):
 
 def generate_post_text(item_name, price, target, tone, api_key, image=None):
     client = genai.Client(api_key=api_key)
-    prompt = f"楽天商品「{item_name}」({price}円)を、{target}向けに{tone}で紹介するThreads投稿文を作成してください。挨拶や前置きは一切不要。最後に「詳細はこちら👇」を入れてください。"
+    prompt = f"楽天商品「{item_name}」({price}円)を、{target}向けに{tone}で紹介するThreads投稿文を作成してください。挨拶なし、本文のみ。最後に「詳細はこちら👇」必須。"
     contents = [prompt, image] if image else prompt
     res = client.models.generate_content(model='gemini-2.5-flash', contents=contents)
     return res.text
@@ -111,11 +111,11 @@ def save_to_sheets(sheet_id, g_json, row_data):
         sheet.append_row(row_data)
         return True
     except Exception as e:
-        st.error(f"スプレッドシート保存失敗: {e}")
+        st.error(f"保存失敗: {e}")
         return False
 
 # ==========================================
-# 🖥️ メインロジック
+# 🖥️ メイン画面
 # ==========================================
 if "api_keys" not in st.session_state:
     st.session_state["api_keys"] = {"rakuten_id":"", "rakuten_key":"", "gemini":"", "threads":"", "sheet_id":"", "g_json":""}
@@ -123,7 +123,6 @@ if "api_keys" not in st.session_state:
 st.sidebar.title("📱 メニュー")
 page = st.sidebar.radio("移動先", ["1. ダッシュボード", "2. 商品作成＆予約投稿", "4. API設定"])
 
-# --- ページ4: API設定 ---
 if page == "4. API設定":
     st.title("⚙️ API設定")
     with st.expander("👤 管理者ログイン"):
@@ -138,53 +137,50 @@ if page == "4. API設定":
                     "sheet_id": st.secrets.get("sheet_id", ""),
                     "g_json": st.secrets.get("g_json", "")
                 }
-                st.success("ロード完了！下の保存ボタンを押してください。")
-    
+                st.success("ロード完了！")
+
     with st.container(border=True):
-        col1, col2 = st.columns(2)
         api = st.session_state["api_keys"]
-        r_id = col1.text_input("楽天 App ID", value=api["rakuten_id"], type="password")
-        r_key = col1.text_input("楽天 Access Key", value=api["rakuten_key"], type="password")
-        g_key = col1.text_input("Gemini API Key", value=api["gemini"], type="password")
-        t_tok = col2.text_input("Threads Token", value=api["threads"], type="password")
-        s_id = col2.text_input("Spreadsheet ID", value=api["sheet_id"])
-        g_js = col2.text_area("Google Service Account JSON", value=api["g_json"], height=100)
+        c1, c2 = st.columns(2)
+        r_id = c1.text_input("楽天 ID", value=api["rakuten_id"], type="password")
+        r_key = c1.text_input("楽天 Key", value=api["rakuten_key"], type="password")
+        g_key = c1.text_input("Gemini Key", value=api["gemini"], type="password")
+        t_tok = c2.text_input("Threads Token", value=api["threads"], type="password")
+        s_id = c2.text_input("Sheet ID", value=api["sheet_id"])
+        g_js = c2.text_area("Service Account JSON", value=api["g_json"], height=100)
         
         if st.button("設定を保存"):
             st.session_state["api_keys"].update({"rakuten_id":r_id, "rakuten_key":r_key, "gemini":g_key, "threads":t_tok, "sheet_id":s_id, "g_json":g_js})
             st.success("保存しました！")
 
-# --- ページ2: 商品作成＆予約 ---
 elif page == "2. 商品作成＆予約投稿":
-    st.title("🛒 商品作成 ＆ 予約投稿")
+    st.title("🛒 商品作成 ＆ 予約")
     api = st.session_state["api_keys"]
     
     if not api["rakuten_id"]:
-        st.warning("API設定を行ってください。")
+        st.warning("先に設定画面でキーを保存してください。")
     else:
-        genres = {"総合": "0", "レディース": "100371", "メンズ": "551177", "家電": "211742", "美容": "100939"}
+        genres = {"総合": "0", "レディース": "100371", "メンズ": "551177", "家電": "211742"}
         sel_genre = st.selectbox("ジャンル", list(genres.keys()))
         if st.button("ランキング取得"):
             st.session_state["items"] = get_rakuten_ranking(api["rakuten_id"], api["rakuten_key"], genres[sel_genre])
         
         if "items" in st.session_state:
-            st.subheader("商品選択")
             selected = []
             for i, item in enumerate(st.session_state["items"]):
                 with st.container(border=True):
                     c1, c2 = st.columns([1, 4])
                     c1.image(item["mediumImageUrls"][0]["imageUrl"])
-                    c2.write(f"**{item['itemName'][:60]}...**")
-                    if c2.checkbox("選択", key=f"c_{i}"):
-                        img = c2.file_uploader("参考画像", type=["jpg","png"], key=f"u_{i}")
+                    c2.write(f"**{item['itemName'][:50]}...**")
+                    if c2.checkbox("選択", key=f"sel_{i}"):
+                        img = c2.file_uploader("参考画像", type=["jpg","png"], key=f"img_{i}")
                         item["user_img"] = img
                         selected.append(item)
             
             if selected:
                 st.divider()
-                col_t1, col_t2 = st.columns(2)
-                target = col_t1.text_input("ターゲット", "30代主婦、時短重視")
-                tone = col_t2.selectbox("トーン", ["エモい", "役立つ", "共感"])
+                target = st.text_input("ターゲット", "30代女性、共感重視", key="target_input")
+                tone = st.selectbox("トーン", ["エモい", "役立つ", "共感"], key="tone_select")
                 if st.button(f"✨ {len(selected)}件の文章を生成"):
                     posts = []
                     bar = st.progress(0)
@@ -196,45 +192,29 @@ elif page == "2. 商品作成＆予約投稿":
                     st.session_state["gen_posts"] = posts
 
         if "gen_posts" in st.session_state:
-            st.subheader("最終確認 ＆ 予約")
             for k, p in enumerate(st.session_state["gen_posts"]):
                 item = p["item"]
-                with st.expander(f"編集: {item['itemName'][:30]}"):
-                    f_txt = st.text_area("投稿本文", value=p["text"], key=f"t_{k}", height=150)
-                    use_img = st.checkbox("商品画像を添付", value=True, key=f"ui_{k}")
+                with st.expander(f"編集: {item['itemName'][:30]}", expanded=True):
+                    # 🌟 重複エラー修正：keyの名前をバラバラにしました
+                    f_txt = st.text_area("本文", value=p["text"], key=f"final_text_{k}", height=150)
+                    use_img = st.checkbox("画像添付", value=True, key=f"use_img_{k}")
                     
                     c_now, c_sch = st.columns(2)
-                    if c_now.button("🚀 今すぐ投稿", key=f"n_{k}"):
+                    if c_now.button("🚀 即時投稿", key=f"now_btn_{k}"):
                         img_url = item["mediumImageUrls"][0]["imageUrl"] if use_img else None
-                        main_id = post_to_threads(api["threads"], f_txt, image_url=img_url)
-                        if main_id:
+                        mid = post_to_threads(api["threads"], f_txt, image_url=img_url)
+                        if mid:
                             time.sleep(5)
-                            post_to_threads(api["threads"], f"▼ 詳細はこちら\n{item['itemUrl']}", reply_to_id=main_id)
+                            post_to_threads(api["threads"], f"▼ 詳細はこちら\n{item['itemUrl']}", reply_to_id=mid)
                             st.success("投稿成功！")
                     
                     with c_sch:
-                        d = st.date_input("予約日", key=f"d_{k}")
-                        t = st.time_input("時間", key=f"t_{k}")
-                        if st.button("🗓️ 予約リストへ追加", key=f"s_{k}"):
-                            if not api["sheet_id"]: st.error("シートID未設定")
-                            else:
-                                # 🌟 スプレッドシートの列順に合わせる
-                                # A:NO, B:本文, C:投稿日, D:時, E:分, F:投稿チェック, G:投稿URL, H:ドライブURL, I:返信, J:画像URL
-                                row = [
-                                    "", # A
-                                    f_txt, # B
-                                    d.strftime('%Y/%m/%d'), # C
-                                    str(t.hour), # D
-                                    str(t.minute), # E
-                                    "pending", # F
-                                    "", # G
-                                    "", # H
-                                    f"▼ 詳細はこちら\n{item['itemUrl']}", # I
-                                    item["mediumImageUrls"][0]["imageUrl"] if use_img else "" # J
-                                ]
-                                if save_to_sheets(api["sheet_id"], api["g_json"], row):
-                                    st.success(f"予約完了！({d} {t})")
+                        d = st.date_input("予約日", key=f"date_input_{k}")
+                        t = st.time_input("時間", key=f"time_input_{k}") # 🌟ここを time_input_{k} に修正
+                        if st.button("🗓️ 予約登録", key=f"sch_btn_{k}"):
+                            row = ["", f_txt, d.strftime('%Y/%m/%d'), str(t.hour), str(t.minute), "pending", "", "", f"▼ 詳細はこちら\n{item['itemUrl']}", item["mediumImageUrls"][0]["imageUrl"] if use_img else ""]
+                            if save_to_sheets(api["sheet_id"], api["g_json"], row):
+                                st.success("予約完了！")
 
 elif page == "1. ダッシュボード":
     st.title("📊 ダッシュボード")
-    st.write("予約状況や投稿実績をここに表示できます。")
