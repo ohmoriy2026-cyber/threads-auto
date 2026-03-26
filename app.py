@@ -30,14 +30,12 @@ st.markdown("""
     ::placeholder { color: #888888 !important; }
     label, p, h1, h2, h3, .stMarkdown { color: #F0F0F0 !important; font-weight: bold; }
     .stButton>button { background-color: #00E5FF !important; color: #000000 !important; font-weight: bold; border-radius: 8px; width: 100%; border: none; }
-    
-    /* データフレーム（表）のデザイン調整 */
     [data-testid="stDataFrame"] { background-color: #000000 !important; border-radius: 8px; }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# ⚙️ 関数群（ダッシュボード用データ取得を含む）
+# ⚙️ 関数群
 # ==========================================
 def save_to_sheets(sheet_id, g_json, row_data):
     if not sheet_id or not g_json: return False
@@ -53,7 +51,6 @@ def save_to_sheets(sheet_id, g_json, row_data):
         return False
 
 def get_sheet_data(sheet_id, g_json):
-    """ダッシュボード用にスプレッドシートの全データを取得"""
     if not sheet_id or not g_json: return []
     try:
         creds_dict = json.loads(g_json)
@@ -63,15 +60,14 @@ def get_sheet_data(sheet_id, g_json):
         data = client.open_by_key(sheet_id).sheet1.get_all_values()
         if len(data) < 2: return []
         headers = data[0]
-        # 空の行を除外して辞書型のリストに変換
         return [dict(zip(headers, row)) for row in data[1:] if any(row)]
     except:
         return []
 
 def get_threads_engagement(token):
-    """ダッシュボード用にThreadsのエンゲージメントを取得"""
+    """🌟 過去最大100件のデータを取得するように強化"""
     if not token: return []
-    url = f"https://graph.threads.net/v1.0/me/threads?fields=id,text,like_count,reply_count,timestamp&access_token={token}"
+    url = f"https://graph.threads.net/v1.0/me/threads?fields=id,text,like_count,reply_count,timestamp&limit=100&access_token={token}"
     try:
         res = requests.get(url).json()
         return res.get("data", [])
@@ -130,50 +126,59 @@ if page == "1. ダッシュボード":
         sheet_data = get_sheet_data(api["sheet_id"], api["g_json"])
         
         if sheet_data:
-            # ステータスごとのカウント
             pending_items = [r for r in sheet_data if r.get("投稿チェック", "") in ["pending", "予約中", ""]]
             completed_items = [r for r in sheet_data if r.get("投稿チェック", "") == "完了"]
             
-            # メトリクス表示
             c1, c2, c3 = st.columns(3)
             with c1: st.metric("⏳ 予約待ち（待機中）", f"{len(pending_items)} 件")
             with c2: st.metric("✅ 投稿完了", f"{len(completed_items)} 件")
             with c3: st.metric("📈 累計データ数", f"{len(sheet_data)} 件")
             
-            # 予約待ちリストのプレビュー表示
             if pending_items:
                 st.write("📅 **直近の予約スケジュール**")
                 preview_list = []
-                for p in pending_items[:5]: # 直近5件を表示
+                for p in pending_items[:5]:
                     dt_str = f"{p.get('投稿日','')} {p.get('時','')}:{p.get('分','')}"
                     txt_prev = p.get('本文', '')[:30] + "..."
                     preview_list.append({"予定日時": dt_str, "投稿プレビュー": txt_prev})
                 st.dataframe(preview_list, use_container_width=True)
             else:
-                st.success("現在、待機中の予約はありません。新しい商品を作成しましょう！")
+                st.success("現在、待機中の予約はありません。")
         else:
-            st.warning("スプレッドシートからデータを取得できませんでした。まだデータがない可能性があります。")
+            st.warning("スプレッドシートからデータを取得できませんでした。")
 
         st.divider()
 
-        # --- エンゲージメント管理（Threads連動） ---
-        st.subheader("❤️ エンゲージメント管理（直近の投稿）")
+        # --- エンゲージメント集計（Threads連動） ---
+        st.subheader("❤️ 過去の投稿エンゲージメント集計")
         threads_data = get_threads_engagement(api["threads"])
         
         if threads_data:
+            # 🌟 累計データの計算
+            total_likes = sum(t.get("like_count", 0) for t in threads_data)
+            total_replies = sum(t.get("reply_count", 0) for t in threads_data)
+            
+            ec1, ec2, ec3 = st.columns(3)
+            with ec1: st.metric("📝 取得した過去の投稿", f"{len(threads_data)} 件")
+            with ec2: st.metric("❤️ 累計いいね数", f"{total_likes} 回")
+            with ec3: st.metric("💬 累計コメント・返信数", f"{total_replies} 件")
+
+            # 🌟 テーブル用のデータ作成（数値にして並び替え可能にする）
             eng_list = []
-            for t in threads_data[:10]: # 直近10件の投稿を分析
+            for t in threads_data:
                 text_prev = t.get("text", "")[:40] + "..." if t.get("text") else "[画像のみ/返信]"
-                likes = t.get("like_count", 0)
-                replies = t.get("reply_count", 0)
+                date_str = t.get("timestamp", "")[:10] # 日付だけを抽出 (YYYY-MM-DD)
+                likes = int(t.get("like_count", 0))
+                replies = int(t.get("reply_count", 0))
                 
-                # スレッドIDが取得できている投稿のみ表示（システム返信などは省く工夫）
                 eng_list.append({
+                    "日付": date_str,
                     "投稿内容": text_prev, 
-                    "❤️ いいね": f"{likes} 回", 
-                    "💬 返信・コメント": f"{replies} 件"
+                    "❤️ いいね": likes, 
+                    "💬 返信": replies
                 })
             
+            st.write("▼ **過去の投稿一覧（表の見出しをクリックすると並び替えできます）**")
             st.dataframe(eng_list, use_container_width=True)
         else:
             st.info("Threadsからデータを取得できませんでした。まだ投稿がないか、APIキーの権限不足の可能性があります。")
@@ -251,7 +256,6 @@ elif page == "2. 商品作成＆予約":
                             if save_to_sheets(api["sheet_id"], api["g_json"], row):
                                 st.balloons()
                                 st.success(f"✅ 保存しました！ ({d} {t})")
-
 
 # ------------------------------------------
 # ⚙️ 4. API設定ページ
