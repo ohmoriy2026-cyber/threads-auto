@@ -1,0 +1,29 @@
+name: Threads Scheduled Post
+
+on:
+  schedule:
+    - cron: '*/15 * * * *' # 15分おきに実行（時間は調整可能）
+  workflow_dispatch: # 手動実行ボタンも追加
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: ambassadors/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install requests gspread google-auth
+
+      - name: Run scheduler
+        env:
+          THREADS_TOKEN: ${{ secrets.THREADS_TOKEN }}
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          G_JSON: ${{ secrets.G_JSON }}
+        run: python scheduler.py
