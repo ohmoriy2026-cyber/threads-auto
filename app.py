@@ -33,9 +33,7 @@ st.markdown("""
     .stButton>button { background-color: #00E5FF !important; color: #000000 !important; font-weight: bold; border-radius: 8px; width: 100%; border: none; }
     [data-testid="stDataFrame"] { background-color: #000000 !important; border-radius: 8px; }
     
-    .ranking-box {
-        background-color: #121214; border: 1px solid #00E5FF; border-radius: 10px; padding: 15px; margin-bottom: 10px;
-    }
+    .ranking-box { background-color: #121214; border: 1px solid #00E5FF; border-radius: 10px; padding: 15px; margin-bottom: 10px; }
     .ranking-rank { font-size: 24px; font-weight: bold; color: #00E5FF; }
 </style>
 """, unsafe_allow_html=True)
@@ -77,16 +75,26 @@ def get_threads_engagement(token):
         return res.get("data", [])
     except: return []
 
+# 🌟 エラーが画面に出るように、そして公式最新URLに修正しました
 def get_rakuten_ranking(app_id, affiliate_id, genre_id):
-    url = "https://openapi.rakuten.co.jp/ichibaranking/api/IchibaItem/Ranking/20220601"
-    params = {"applicationId": app_id, "genreId": genre_id}
-    if affiliate_id:
-        params["affiliateId"] = affiliate_id
+    if not app_id:
+        st.error("楽天 App ID が設定されていません。API設定を確認してください。")
+        return []
+        
+    url = "https://app.rakuten.co.jp/services/api/IchibaItem/Ranking/20220601"
+    params = {"applicationId": str(app_id).strip(), "genreId": str(genre_id).strip()}
+    if affiliate_id and str(affiliate_id).strip():
+        params["affiliateId"] = str(affiliate_id).strip()
         
     try:
-        res = requests.get(url, params=params, headers={"Referer": "https://localhost/"})
+        res = requests.get(url, params=params)
+        if res.status_code != 200:
+            st.error(f"❌ 楽天APIエラー ({res.status_code}): {res.text}")
+            return []
         return [item["Item"] for item in res.json().get("Items", [])[:10]]
-    except: return []
+    except Exception as e:
+        st.error(f"❌ 通信エラー: {e}")
+        return []
 
 def generate_post_text(item_name, price, target_str, tone, length, api_key, image=None):
     client = genai.Client(api_key=api_key)
@@ -207,46 +215,22 @@ elif page == "2. 商品作成＆予約":
     if not api["rakuten_id"]: st.warning("API設定を先に済ませてください。")
     else:
         with st.container(border=True):
-            # 🌟 全35ジャンル ＋ その他(ID指定) を完全復活！
             genres_dict = {
-                "🏆 総合ランキング": "0",
-                "👗 レディースファッション": "100371",
-                "👔 メンズファッション": "551177",
-                "👜 バッグ・小物・ブランド雑貨": "216129",
-                "👟 靴": "558885",
-                "⌚ 腕時計": "558929",
-                "💎 ジュエリー・アクセサリー": "200162",
-                "💄 美容・コスメ・香水": "100939",
-                "💊 ダイエット・健康": "100143",
-                "🏥 医薬品・コンタクト・介護": "551169",
-                "🍎 食品": "100227",
-                "🍪 スイーツ・お菓子": "551167",
-                "🍹 水・ソフトドリンク": "100316",
-                "🍺 ビール・洋酒": "510915",
-                "🍶 日本酒・焼酎": "510901",
-                "🛋 インテリア・寝具・収納": "100804",
-                "🍳 キッチン・食器・調理器具": "558944",
-                "🧼 日用品・文房具・手芸": "215783",
-                "🔌 家電": "562631",
-                "📸 TV・オーディオ・カメラ": "211742",
-                "💻 パソコン・周辺機器": "100026",
-                "📱 スマフォ・タブレット": "562637",
-                "⚽ スポーツ・アウトドア": "101070",
-                "⛳ ゴルフ用品": "101077",
-                "🚗 車・バイク用品": "503190",
-                "🧸 おもちゃ": "101164",
-                "🎨 ホビー": "101165",
-                "🎸 楽器・音響機器": "112493",
-                "🐱 ペット・ペットグッズ": "101213",
-                "🍼 キッズ・ベビー・マタニティ": "100533",
-                "📚 本・雑誌・コミック": "200376",
-                "📀 CD・DVD": "101240",
-                "🎮 TVゲーム": "101205",
+                "🏆 総合ランキング": "0", "👗 レディースファッション": "100371", "👔 メンズファッション": "551177",
+                "👜 バッグ・小物・ブランド雑貨": "216129", "👟 靴": "558885", "⌚ 腕時計": "558929",
+                "💎 ジュエリー・アクセサリー": "200162", "💄 美容・コスメ・香水": "100939", "💊 ダイエット・健康": "100143",
+                "🏥 医薬品・コンタクト・介護": "551169", "🍎 食品": "100227", "🍪 スイーツ・お菓子": "551167",
+                "🍹 水・ソフトドリンク": "100316", "🍺 ビール・洋酒": "510915", "🍶 日本酒・焼酎": "510901",
+                "🛋 インテリア・寝具・収納": "100804", "🍳 キッチン・食器・調理器具": "558944", "🧼 日用品・文房具・手芸": "215783",
+                "🔌 家電": "562631", "📸 TV・オーディオ・カメラ": "211742", "💻 パソコン・周辺機器": "100026",
+                "📱 スマフォ・タブレット": "562637", "⚽ スポーツ・アウトドア": "101070", "⛳ ゴルフ用品": "101077",
+                "🚗 車・バイク用品": "503190", "🧸 おもちゃ": "101164", "🎨 ホビー": "101165",
+                "🎸 楽器・音響機器": "112493", "🐱 ペット・ペットグッズ": "101213", "🍼 キッズ・ベビー・マタニティ": "100533",
+                "📚 本・雑誌・コミック": "200376", "📀 CD・DVD": "101240", "🎮 TVゲーム": "101205",
                 "🔧 その他 (ID指定)": "custom"
             }
             sel_name = st.selectbox("ランキングを取得したいジャンルを選択", list(genres_dict.keys()), key="sel_genre_p2")
             
-            # 🌟 ID手動入力機能も復活！
             target_id = genres_dict[sel_name]
             if target_id == "custom":
                 target_id = st.text_input("楽天ジャンルIDを入力してください（例: 211742）", key="custom_id_in")
