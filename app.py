@@ -9,6 +9,8 @@ from google.oauth2.service_account import Credentials
 import json
 import pandas as pd
 import concurrent.futures
+import re
+import urllib.parse
 
 # ==========================================
 # 🎨 デザイナー設計：テーマ対応のモダンUI
@@ -17,10 +19,7 @@ st.set_page_config(page_title="Threads Marketing Pro", layout="wide", initial_si
 
 st.markdown("""
 <style>
-    /* フォント設定 */
     .stApp { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; }
-    
-    /* コンテナ（枠線・影・ホバーアクション） */
     [data-testid="stVerticalBlockBorderWrapper"] { 
         border-radius: 12px; padding: 20px; margin-bottom: 15px; 
         box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -28,19 +27,13 @@ st.markdown("""
     [data-testid="stVerticalBlockBorderWrapper"]:hover {
         transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.08);
     }
-    
-    /* ボタンデザイン */
     .stButton>button { 
         background-color: #007AFF !important; color: #FFFFFF !important; font-weight: bold; 
         border-radius: 8px; width: 100%; border: none; padding: 0.5rem 1rem; transition: all 0.2s;
     }
     .stButton>button:hover { background-color: #0056b3 !important; transform: scale(1.02); }
-    
-    /* メトリクス（数値）のデザイン */
     [data-testid="stMetricValue"] { font-size: 2rem !important; font-weight: 800 !important; color: #007AFF !important; }
     [data-testid="stMetricLabel"] { font-size: 1rem !important; font-weight: 600 !important; }
-    
-    /* トップ5ランキング専用スタイル (テーマ自動適応) */
     .ranking-box {
         border-left: 5px solid #007AFF; border-radius: 8px; 
         padding: 15px 20px; margin-bottom: 12px; background-color: rgba(0, 122, 255, 0.05);
@@ -52,11 +45,13 @@ st.markdown("""
         display: inline-block; background: rgba(128,128,128, 0.15); padding: 4px 10px; 
         border-radius: 20px; font-size: 13px; font-weight: bold; margin-right: 8px; 
     }
+    /* タブのデザインを少しリッチに */
+    [data-testid="stTabs"] button { font-size: 16px; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# ⚙️ 関数群（APIから確実に数字を拾う並列処理）
+# ⚙️ 関数群
 # ==========================================
 def save_to_sheets(sheet_id, g_json, row_data):
     if not sheet_id or not g_json: return False
@@ -115,7 +110,6 @@ def get_threads_engagement(token):
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
             enriched_threads = list(executor.map(fetch_insights, threads))
-            
         return enriched_threads
     except Exception as e: 
         return []
@@ -135,6 +129,31 @@ def get_rakuten_ranking(app_id, access_key, affiliate_id, genre_id):
         return [item["Item"] for item in res.json().get("Items", [])[:10]]
     except Exception as e:
         return []
+
+# 🌟 新規追加：URLから商品の名前と画像を自動取得する関数
+def get_item_info_from_url(url):
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        res = requests.get(url, headers=headers, timeout=10)
+        res.encoding = res.apparent_encoding
+        html = res.text
+        
+        t_m = re.search(r'<title>(.*?)</title>', html, re.IGNORECASE | re.DOTALL)
+        title = t_m.group(1).strip() if t_m else "商品名を取得できませんでした"
+        title = title.replace("【楽天市場】", "").split("：")[0].strip() # 楽天のタイトルを綺麗にする
+        
+        i_m = re.search(r'<meta\s+property="og:image"\s+content="(.*?)"', html, re.IGNORECASE)
+        image = i_m.group(1) if i_m else ""
+        
+        return {"itemName": title[:100], "imageUrl": image, "itemUrl": url, "itemPrice": "価格を入力"}
+    except:
+        return None
+
+# 🌟 新規追加：商品URLから自分のアフィリエイトリンクを生成する関数
+def create_affiliate_url(url, aff_id):
+    if not aff_id: return url
+    encoded_url = urllib.parse.quote(url, safe='')
+    return f"https://hb.afl.rakuten.co.jp/ichiba/{aff_id}/?pc={encoded_url}"
 
 def generate_post_text(item_name, price, target_str, tone, length, custom_prompt, api_key, image=None):
     client = genai.Client(api_key=api_key)
@@ -194,10 +213,7 @@ if page == "1. ダッシュボード":
         if sheet_data:
             today_pending = [r for r in sheet_data if r.get("投稿チェック", "") in ["pending", "予約中", ""] and r.get("投稿日", "") == today_str]
             if today_pending:
-                preview_list = []
-                for p in today_pending:
-                    dt_str = f"{p.get('時','')}:{p.get('分','')}"
-                    preview_list.append({"予定時間": dt_str, "本文プレビュー": p.get('本文', '')[:40] + "..."})
+                preview_list = [{"予定時間": f"{p.get('時','')}:{p.get('分','')}", "本文プレビュー": p.get('本文', '')[:40] + "..."} for p in today_pending]
                 st.dataframe(preview_list, use_container_width=True, hide_index=True)
             else:
                 st.success("本日の待機中の投稿はありません。")
@@ -211,7 +227,6 @@ if page == "1. ダッシュボード":
         
         if threads_data:
             df = pd.DataFrame(threads_data)
-            
             for col in ['like_count', 'reply_count', 'views']:
                 if col not in df.columns: df[col] = 0
             if 'text' not in df.columns: df['text'] = ""
@@ -254,10 +269,7 @@ if page == "1. ダッシュボード":
                 for i, row in top5_df.iterrows():
                     st.markdown(f"""
                     <div class="ranking-box">
-                        <div>
-                            <span class="ranking-rank">#{top5_df.index.get_loc(i) + 1}</span>
-                            <span style="color:#9CA3AF; font-size: 14px;">{row['timestamp']}</span>
-                        </div>
+                        <div><span class="ranking-rank">#{top5_df.index.get_loc(i) + 1}</span><span style="color:#9CA3AF; font-size: 14px;">{row['timestamp']}</span></div>
                         <p class="ranking-text">{row['text'] if row['text'] else '[画像のみ]'}</p>
                         <div>
                             <span class="stat-badge">👀 閲覧: {row['views']:,}</span>
@@ -301,15 +313,10 @@ elif page == "3. エンゲージメント分析":
             df = df[~df['text'].astype(str).str.contains("▼ 詳細はこちら", na=False)]
 
             st.subheader("📊 累計パフォーマンス")
-
-            total_likes = df['like_count'].sum()
-            total_views = df['views'].sum()
-            total_replies = df['reply_count'].sum()
-
             c1, c2, c3 = st.columns(3)
-            with c1: st.metric("👀 累計閲覧数", f"{total_views:,}")
-            with c2: st.metric("❤️ 累計いいね数", f"{total_likes:,}")
-            with c3: st.metric("💬 累計コメント数", f"{total_replies:,}")
+            with c1: st.metric("👀 累計閲覧数", f"{df['views'].sum():,}")
+            with c2: st.metric("❤️ 累計いいね数", f"{df['like_count'].sum():,}")
+            with c3: st.metric("💬 累計コメント数", f"{df['reply_count'].sum():,}")
 
             st.divider()
 
@@ -322,9 +329,6 @@ elif page == "3. エンゲージメント分析":
             
             st.dataframe(display_df.sort_values(by='投稿日', ascending=False), use_container_width=True, hide_index=True)
 
-        else:
-            st.info("Threadsデータが取得できませんでした。")
-
 
 # ==========================================
 # 🛒 2. 商品作成＆予約ページ
@@ -333,104 +337,184 @@ elif page == "2. 商品作成＆予約":
     st.title("🛒 商品作成 ＆ 予約")
     api = st.session_state["api_keys"]
     
-    if not api["rakuten_id"]: st.warning("API設定を先に済ませてください。")
+    if not api["rakuten_id"]: 
+        st.warning("API設定を先に済ませてください。")
     else:
-        with st.container(border=True):
-            genres_dict = {
-                "🏆 総合ランキング": "0", "👗 レディースファッション": "100371", "👔 メンズファッション": "551177",
-                "👜 バッグ・小物・ブランド雑貨": "216129", "👟 靴": "558885", "⌚ 腕時計": "558929",
-                "💎 ジュエリー・アクセサリー": "200162", "💄 美容・コスメ・香水": "100939", "💊 ダイエット・健康": "100143",
-                "🏥 医薬品・コンタクト・介護": "551169", "🍎 食品": "100227", "🍪 スイーツ・お菓子": "551167",
-                "🍹 水・ソフトドリンク": "100316", "🍺 ビール・洋酒": "510915", "🍶 日本酒・焼酎": "510901",
-                "🛋 インテリア・寝具・収納": "100804", "🍳 キッチン・食器・調理器具": "558944", "🧼 日用品・文房具・手芸": "215783",
-                "🔌 家電": "562631", "📸 TV・オーディオ・カメラ": "211742", "💻 パソコン・周辺機器": "100026",
-                "📱 スマフォ・タブレット": "562637", "⚽ スポーツ・アウトドア": "101070", "⛳ ゴルフ用品": "101077",
-                "🚗 車・バイク用品": "503190", "🧸 おもちゃ": "101164", "🎨 ホビー": "101165",
-                "🎸 楽器・音響機器": "112493", "🐱 ペット・ペットグッズ": "101213", "🍼 キッズ・ベビー・マタニティ": "100533",
-                "📚 本・雑誌・コミック": "200376", "📀 CD・DVD": "101240", "🎮 TVゲーム": "101205",
-                "🔧 その他 (ID指定)": "custom"
-            }
-            sel_name = st.selectbox("ランキングを取得したいジャンルを選択", list(genres_dict.keys()), key="sel_genre_p2")
-            
-            target_id = genres_dict[sel_name]
-            if target_id == "custom":
-                target_id = st.text_input("楽天ジャンルIDを入力してください", key="custom_id_in")
+        # 🌟 タブで画面を分割！
+        tab1, tab2 = st.tabs(["🏆 ランキングから探す", "🔗 商品URLから作る"])
 
-            if st.button("ランキング取得", key="get_rank_p2"):
-                st.session_state["items"] = get_rakuten_ranking(api["rakuten_id"], api["rakuten_key"], api["rakuten_aff_id"], target_id)
+        # ------------------------------------
+        # タブ1：ランキングから探す（既存の機能）
+        # ------------------------------------
+        with tab1:
+            st.write("人気のランキングから商品を一括で探して作成します。")
+            with st.container(border=True):
+                genres_dict = {
+                    "🏆 総合ランキング": "0", "👗 レディースファッション": "100371", "👔 メンズファッション": "551177",
+                    "👜 バッグ・小物・ブランド雑貨": "216129", "👟 靴": "558885", "⌚ 腕時計": "558929",
+                    "💎 ジュエリー・アクセサリー": "200162", "💄 美容・コスメ・香水": "100939", "💊 ダイエット・健康": "100143",
+                    "🏥 医薬品・コンタクト・介護": "551169", "🍎 食品": "100227", "🍪 スイーツ・お菓子": "551167",
+                    "🍹 水・ソフトドリンク": "100316", "🔌 家電": "562631", "🍼 キッズ・ベビー・マタニティ": "100533",
+                    "🔧 その他 (ID指定)": "custom"
+                }
+                sel_name = st.selectbox("ランキングを取得したいジャンルを選択", list(genres_dict.keys()), key="sel_genre_p2")
                 
-                # 🌟 【重要修正】ジャンルを変えたら、以前の生成結果を消去（リセット）する！
-                if "gen_res_p2" in st.session_state:
-                    del st.session_state["gen_res_p2"]
+                target_id = genres_dict[sel_name]
+                if target_id == "custom":
+                    target_id = st.text_input("楽天ジャンルIDを入力してください", key="custom_id_in")
 
-        if "items" in st.session_state:
-            selected = []
-            for i, item in enumerate(st.session_state["items"]):
-                with st.container(border=True):
-                    c1, c2 = st.columns([1, 4])
-                    c1.image(item["mediumImageUrls"][0]["imageUrl"])
-                    c2.write(f"**{item['itemName'][:50]}...**")
-                    if c2.checkbox("選ぶ", key=f"sel_chk_{i}"):
-                        item["u_img"] = c2.file_uploader("画像", type=["jpg","png"], key=f"u_f_{i}")
-                        selected.append(item)
+                if st.button("ランキング取得", key="get_rank_p2"):
+                    st.session_state["items"] = get_rakuten_ranking(api["rakuten_id"], api["rakuten_key"], api["rakuten_aff_id"], target_id)
+                    if "gen_res_p2" in st.session_state: del st.session_state["gen_res_p2"] # キャッシュリセット
+
+            if "items" in st.session_state:
+                selected = []
+                for i, item in enumerate(st.session_state["items"]):
+                    with st.container(border=True):
+                        c1, c2 = st.columns([1, 4])
+                        c1.image(item["mediumImageUrls"][0]["imageUrl"])
+                        c2.write(f"**{item['itemName'][:50]}...**")
+                        if c2.checkbox("選ぶ", key=f"sel_chk_{i}"):
+                            item["u_img"] = c2.file_uploader("オリジナル画像を使う", type=["jpg","png"], key=f"u_f_{i}")
+                            selected.append(item)
+                
+                if selected:
+                    st.divider()
+                    with st.container(border=True):
+                        st.subheader("ターゲット・文章設定")
+                        c1, c2, c3 = st.columns(3)
+                        with c1: gender = st.radio("性別", ["女性", "男性", "指定なし"], key="r_gen")
+                        with c2: age = st.multiselect("年代", ["10代", "20代", "30代", "40代", "50代〜"], default=["20代", "30代"], key="m_age")
+                        with c3: kids = st.radio("子供", ["なし", "未就学児", "小学生"], key="r_kids")
+                        
+                        c4, c5 = st.columns(2)
+                        tone_list = ["エモい", "役立つ", "元気", "親近感 (友だち風)", "本音レビュー風", "専門家 (プロ目線)", "ユーモア (面白く)", "あざと可愛い", "高級感 (エレガント)", "ズボラ・時短命"]
+                        with c4: tone = st.selectbox("トーン", tone_list, key="s_tone")
+                        with c5: length = st.slider("文字数", 10, 500, 50, step=10, key="s_len")
+                        
+                        custom_prompt = st.text_area("✍️ 自由な追加指示 (オプション)", placeholder="例: メリットを3つ箇条書きで！", key="c_prompt")
+                        
+                        if st.button(f"✨ {len(selected)}件の文章を生成", key="gen_btn_p2"):
+                            t_str = f"{gender}, 年代:{','.join(age)}, 子供:{kids}"
+                            res = []
+                            pb = st.progress(0)
+                            for j, s_item in enumerate(selected):
+                                img_obj = Image.open(s_item["u_img"]) if s_item["u_img"] else None
+                                txt = generate_post_text(s_item["itemName"], s_item["itemPrice"], t_str, tone, length, custom_prompt, api["gemini"], img_obj)
+                                res.append({"item": s_item, "text": txt})
+                                pb.progress((j+1)/len(selected))
+                            st.session_state["gen_res_p2"] = res
+
+            if "gen_res_p2" in st.session_state:
+                for k, p in enumerate(st.session_state["gen_res_p2"]):
+                    item = p["item"]
+                    target_url = item.get("affiliateUrl", item["itemUrl"])
+                    
+                    with st.expander(f"確認: {item['itemName'][:30]}", expanded=True):
+                        f_txt = st.text_area("本文", value=p["text"], key=f"final_txt_{k}", height=150)
+                        use_img = st.checkbox("商品画像(楽天)を含める", value=True, key=f"use_img_{k}")
+                        
+                        c_now, c_sch = st.columns(2)
+                        if c_now.button("🚀 即時投稿", key=f"btn_now_{k}"):
+                            i_url = item["mediumImageUrls"][0]["imageUrl"] if use_img else None
+                            mid = post_to_threads(api["threads"], f_txt, image_url=i_url)
+                            if mid:
+                                time.sleep(5)
+                                post_to_threads(api["threads"], f"▼ 詳細はこちら\n{target_url}", reply_to_id=mid)
+                                st.success("成功！")
+                        
+                        with c_sch:
+                            d = st.date_input("予約日", key=f"d_in_{k}")
+                            t = st.time_input("時間", key=f"t_in_{k}")
+                            if st.button("🗓️ 予約リストに追加", key=f"reserve_final_btn_{k}"):
+                                row = ["", f_txt, d.strftime('%Y/%m/%d'), str(t.hour), str(t.minute), "pending", "", "", f"▼ 詳細はこちら\n{target_url}", item["mediumImageUrls"][0]["imageUrl"] if use_img else ""]
+                                if save_to_sheets(api["sheet_id"], api["g_json"], row):
+                                    st.balloons()
+                                    st.success(f"✅ 保存しました！ ({d} {t})")
+
+        # ------------------------------------
+        # 🌟 タブ2：商品URLから作る（新機能！）
+        # ------------------------------------
+        with tab2:
+            st.write("楽天の商品ページのURLを直接貼り付けて、自分だけの商品紹介を作ります。")
+            with st.container(border=True):
+                input_url = st.text_input("🔗 楽天の商品URLを貼り付け", placeholder="https://item.rakuten.co.jp/...", key="input_url_tab2")
+                
+                if st.button("商品情報を取得", key="get_url_btn"):
+                    if input_url:
+                        with st.spinner("商品ページから情報を取得しています..."):
+                            info = get_item_info_from_url(input_url)
+                            if info:
+                                st.session_state["url_item"] = info
+                                if "gen_res_tab2" in st.session_state: del st.session_state["gen_res_tab2"] # キャッシュリセット
+                            else:
+                                st.error("情報の取得に失敗しました。正しい楽天のURLか確認してください。")
             
-            if selected:
+            if "url_item" in st.session_state:
+                item = st.session_state["url_item"]
                 st.divider()
-                with st.container(border=True):
-                    st.subheader("ターゲット・文章設定")
-                    
-                    c1, c2, c3 = st.columns(3)
-                    with c1: gender = st.radio("性別", ["女性", "男性", "指定なし"], key="r_gen")
-                    with c2: age = st.multiselect("年代", ["10代", "20代", "30代", "40代", "50代〜"], default=["20代", "30代"], key="m_age")
-                    with c3: kids = st.radio("子供", ["なし", "未就学児", "小学生"], key="r_kids")
-                    
-                    c4, c5 = st.columns(2)
-                    tone_list = [
-                        "エモい", "役立つ", "元気", "親近感 (友だち風)", "本音レビュー風", 
-                        "専門家 (プロ目線)", "ユーモア (面白く)", "あざと可愛い", "高級感 (エレガント)", "ズボラ・時短命"
-                    ]
-                    with c4: tone = st.selectbox("トーン", tone_list, key="s_tone")
-                    with c5: length = st.slider("文字数", 10, 500, 50, step=10, key="s_len")
-                    
-                    custom_prompt = st.text_area("✍️ 自由な追加指示 (オプション)", placeholder="例: メリットを3つ箇条書きで入れて！ / 絵文字をたくさん使って！ など", key="c_prompt")
-                    
-                    if st.button(f"✨ {len(selected)}件の文章を生成", key="gen_btn_p2"):
-                        t_str = f"{gender}, 年代:{','.join(age)}, 子供:{kids}"
-                        res = []
-                        pb = st.progress(0)
-                        for j, s_item in enumerate(selected):
-                            img_obj = Image.open(s_item["u_img"]) if s_item["u_img"] else None
-                            txt = generate_post_text(s_item["itemName"], s_item["itemPrice"], t_str, tone, length, custom_prompt, api["gemini"], img_obj)
-                            res.append({"item": s_item, "text": txt})
-                            pb.progress((j+1)/len(selected))
-                        st.session_state["gen_res_p2"] = res
-
-        if "gen_res_p2" in st.session_state:
-            for k, p in enumerate(st.session_state["gen_res_p2"]):
-                item = p["item"]
-                target_url = item.get("affiliateUrl", item["itemUrl"])
+                st.subheader("📝 商品情報の確認・編集")
                 
-                with st.expander(f"確認: {item['itemName'][:30]}", expanded=True):
-                    f_txt = st.text_area("本文", value=p["text"], key=f"final_txt_{k}", height=150)
-                    use_img = st.checkbox("画像あり", value=True, key=f"use_img_{k}")
+                c1, c2 = st.columns([1, 4])
+                if item["imageUrl"]: c1.image(item["imageUrl"])
+                else: c1.info("画像なし")
+                
+                edit_name = c2.text_input("商品名（AIに伝わりやすいように編集できます）", value=item["itemName"], key="edit_name")
+                edit_price = c2.text_input("価格（任意）", value=item["itemPrice"], key="edit_price")
+                u_img_tab2 = c2.file_uploader("オリジナルの写真を使う場合（AIの認識用）", type=["jpg","png"], key="u_img_tab2")
+                
+                st.divider()
+                st.subheader("ターゲット・文章設定")
+                
+                tc1, tc2, tc3 = st.columns(3)
+                with tc1: gen_t2 = st.radio("性別", ["女性", "男性", "指定なし"], key="r_gen_t2")
+                with tc2: age_t2 = st.multiselect("年代", ["10代", "20代", "30代", "40代", "50代〜"], default=["20代", "30代"], key="m_age_t2")
+                with tc3: kids_t2 = st.radio("子供", ["なし", "未就学児", "小学生"], key="r_kids_t2")
+                
+                tc4, tc5 = st.columns(2)
+                with tc4: tone_t2 = st.selectbox("トーン", tone_list, key="s_tone_t2")
+                with tc5: len_t2 = st.slider("文字数", 10, 500, 50, step=10, key="s_len_t2")
+                
+                cp_t2 = st.text_area("✍️ 自由な追加指示 (オプション)", key="cp_t2")
+                
+                if st.button("✨ この商品の文章を生成", key="gen_btn_tab2"):
+                    t_str = f"{gen_t2}, 年代:{','.join(age_t2)}, 子供:{kids_t2}"
+                    img_obj_pass = Image.open(u_img_tab2) if u_img_tab2 else None
                     
-                    c_now, c_sch = st.columns(2)
-                    if c_now.button("🚀 即時投稿", key=f"btn_now_{k}"):
-                        i_url = item["mediumImageUrls"][0]["imageUrl"] if use_img else None
-                        mid = post_to_threads(api["threads"], f_txt, image_url=i_url)
-                        if mid:
-                            time.sleep(5)
-                            post_to_threads(api["threads"], f"▼ 詳細はこちら\n{target_url}", reply_to_id=mid)
-                            st.success("成功！")
-                    
-                    with c_sch:
-                        d = st.date_input("予約日", key=f"d_in_{k}")
-                        t = st.time_input("時間", key=f"t_in_{k}")
-                        if st.button("🗓️ 予約リストに追加", key=f"reserve_final_btn_{k}"):
-                            row = ["", f_txt, d.strftime('%Y/%m/%d'), str(t.hour), str(t.minute), "pending", "", "", f"▼ 詳細はこちら\n{target_url}", item["mediumImageUrls"][0]["imageUrl"] if use_img else ""]
-                            if save_to_sheets(api["sheet_id"], api["g_json"], row):
-                                st.balloons()
-                                st.success(f"✅ 保存しました！ ({d} {t})")
+                    with st.spinner("AIが執筆中..."):
+                        txt = generate_post_text(edit_name, edit_price, t_str, tone_t2, len_t2, cp_t2, api["gemini"], img_obj_pass)
+                        st.session_state["gen_res_tab2"] = {
+                            "text": txt,
+                            "itemName": edit_name,
+                            "target_url": create_affiliate_url(item["itemUrl"], api["rakuten_aff_id"]),
+                            "imageUrl": item["imageUrl"]
+                        }
+
+            if "gen_res_tab2" in st.session_state:
+                p = st.session_state["gen_res_tab2"]
+                st.divider()
+                st.subheader("✅ 生成結果")
+                
+                f_txt_t2 = st.text_area("本文", value=p["text"], key="final_txt_t2", height=150)
+                use_img_t2 = st.checkbox("商品画像(Webの画像)を含める", value=True, key="use_img_t2")
+                
+                c_now_t2, c_sch_t2 = st.columns(2)
+                if c_now_t2.button("🚀 即時投稿", key="btn_now_t2"):
+                    i_url = p["imageUrl"] if use_img_t2 else None
+                    mid = post_to_threads(api["threads"], f_txt_t2, image_url=i_url)
+                    if mid:
+                        time.sleep(5)
+                        post_to_threads(api["threads"], f"▼ 詳細はこちら\n{p['target_url']}", reply_to_id=mid)
+                        st.success("成功！")
+                
+                with c_sch_t2:
+                    d_t2 = st.date_input("予約日", key="d_in_t2")
+                    t_t2 = st.time_input("時間", key="t_in_t2")
+                    if st.button("🗓️ 予約リストに追加", key="reserve_final_btn_t2"):
+                        row = ["", f_txt_t2, d_t2.strftime('%Y/%m/%d'), str(t_t2.hour), str(t_t2.minute), "pending", "", "", f"▼ 詳細はこちら\n{p['target_url']}", p["imageUrl"] if use_img_t2 else ""]
+                        if save_to_sheets(api["sheet_id"], api["g_json"], row):
+                            st.balloons()
+                            st.success(f"✅ 保存しました！ ({d_t2} {t_t2})")
 
 # ==========================================
 # ⚙️ 4. API設定ページ
