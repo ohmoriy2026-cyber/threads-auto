@@ -69,19 +69,17 @@ def get_sheet_data(sheet_id, g_json):
 
 def get_threads_engagement(token):
     if not token: return []
-    url = f"https://graph.threads.net/v1.0/me/threads?fields=id,text,like_count,reply_count,views,timestamp&limit=100&access_token={token}"
+    url = f"https://graph.threads.net/v1.0/me/threads?fields=id,text,like_count,reply_count,views,timestamp,is_reply&limit=100&access_token={token}"
     try:
         res = requests.get(url).json()
         return res.get("data", [])
     except: return []
 
-# 🌟 新APIエンドポイントと「Access Key」を完全復活させました
 def get_rakuten_ranking(app_id, access_key, affiliate_id, genre_id):
     if not app_id or not access_key:
         st.error("楽天 App ID または Access Key が設定されていません。")
         return []
         
-    # 最新APIの正しいURL（UUID対応版）
     url = "https://openapi.rakuten.co.jp/ichibaranking/api/IchibaItem/Ranking/20220601"
     params = {
         "applicationId": str(app_id).strip(),
@@ -101,9 +99,15 @@ def get_rakuten_ranking(app_id, access_key, affiliate_id, genre_id):
         st.error(f"❌ 通信エラー: {e}")
         return []
 
+# 🌟 プロンプトを大幅改良！人間味と好奇心を煽るフックを重視
 def generate_post_text(item_name, price, target_str, tone, length, api_key, image=None):
     client = genai.Client(api_key=api_key)
-    prompt = f"楽天商品「{item_name}」({price}円)を、ターゲット【{target_str}】に向けて、{tone}な感じで、約{length}文字で作って。挨拶なし、本文のみ。最後に「詳細はこちら👇」必須。"
+    prompt = f"""楽天商品「{item_name}」({price}円)を、ターゲット【{target_str}】に向けて、{tone}なテイストで約{length}文字で紹介してください。
+【条件】
+・挨拶や前置きは一切不要、本文のみを出力すること。
+・「詳細はこちら」などのURL誘導文は絶対に書かないこと。
+・AIが書いたような無難で不自然な表現は避け、まるで友人が興奮して勧めているような、人間味のあるリアルな言葉を使うこと。
+・読んだ人が思わず「なにこれ！」「気になる！」とタップしたくなるような、好奇心をくすぐる魅力的なフックを入れること。"""
     contents = [prompt, image] if image else prompt
     return client.models.generate_content(model='gemini-2.5-flash', contents=contents).text
 
@@ -170,22 +174,32 @@ if page == "1. ダッシュボード":
 
             st.divider()
 
-            st.subheader("🏆 反響が大きかった投稿 トップ5")
-            df['total_eng'] = df['like_count'] + df['reply_count']
-            top5_df = df.sort_values(by='total_eng', ascending=False).head(5)
+            st.subheader("🏆 反響が大きかった投稿 トップ5 (リプライを除く)")
+            
+            ranking_df = df.copy()
+            if 'is_reply' in ranking_df.columns:
+                ranking_df = ranking_df[ranking_df['is_reply'] != True]
+            ranking_df = ranking_df[~ranking_df['text'].astype(str).str.contains("▼ 詳細はこちら", na=False)]
 
-            for i, row in top5_df.iterrows():
-                with st.container():
-                    st.markdown(f"""
-                    <div class="ranking-box">
-                        <span class="ranking-rank">#{top5_df.index.get_loc(i) + 1}</span> &nbsp;&nbsp;
-                        <span style="color:#888;">{row['timestamp']}</span><br>
-                        <p style="color:#FFF; font-size:16px;">{row['text'][:100] if row['text'] else '[画像のみ/返信]'}</p>
-                        <span style="color:#00E5FF;">👀 {row['views']:,}</span> &nbsp;&nbsp;
-                        <span style="color:#F0F;">❤️ {row['like_count']}</span> &nbsp;&nbsp;
-                        <span style="color:#FF0;">💬 {row['reply_count']}</span>
-                    </div>
-                    """, unsafe_allow_html=True)
+            ranking_df['total_eng'] = ranking_df['like_count'] + ranking_df['reply_count']
+            
+            if not ranking_df.empty:
+                top5_df = ranking_df.sort_values(by='total_eng', ascending=False).head(5)
+
+                for i, row in top5_df.iterrows():
+                    with st.container():
+                        st.markdown(f"""
+                        <div class="ranking-box">
+                            <span class="ranking-rank">#{top5_df.index.get_loc(i) + 1}</span> &nbsp;&nbsp;
+                            <span style="color:#888;">{row['timestamp']}</span><br>
+                            <p style="color:#FFF; font-size:16px;">{row['text'][:100] if row['text'] else '[画像のみ/返信]'}</p>
+                            <span style="color:#00E5FF;">👀 {row['views']:,}</span> &nbsp;&nbsp;
+                            <span style="color:#F0F;">❤️ {row['like_count']}</span> &nbsp;&nbsp;
+                            <span style="color:#FF0;">💬 {row['reply_count']}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+            else:
+                st.info("ランキングに表示できるオリジナル投稿がまだありません。")
             
             st.divider()
 
@@ -244,7 +258,6 @@ elif page == "2. 商品作成＆予約":
                 target_id = st.text_input("楽天ジャンルIDを入力してください（例: 211742）", key="custom_id_in")
 
             if st.button("ランキング取得", key="get_rank_p2"):
-                # 🌟 access_key を渡すように修正！
                 st.session_state["items"] = get_rakuten_ranking(api["rakuten_id"], api["rakuten_key"], api["rakuten_aff_id"], target_id)
 
         if "items" in st.session_state:
@@ -320,7 +333,7 @@ elif page == "4. API設定":
                 st.error("❌ Streamlit CloudのSecretsに master_password がありません。")
             elif pw == secret_pw:
                 st.session_state["f_ri"] = st.secrets.get("rakuten_id", "")
-                st.session_state["f_rk"] = st.secrets.get("rakuten_key", "") # 🌟 Access Key 復活！
+                st.session_state["f_rk"] = st.secrets.get("rakuten_key", "")
                 st.session_state["f_ra"] = st.secrets.get("rakuten_aff_id", "")
                 st.session_state["f_gk"] = st.secrets.get("gemini_key", "")
                 st.session_state["f_tt"] = st.secrets.get("threads_token", "")
@@ -333,7 +346,7 @@ elif page == "4. API設定":
     with st.container(border=True):
         c1, c2 = st.columns(2)
         r_id = c1.text_input("楽天 App ID", type="password", key="f_ri")
-        r_key = c1.text_input("楽天 Access Key", type="password", key="f_rk") # 🌟 Access Key 復活！
+        r_key = c1.text_input("楽天 Access Key", type="password", key="f_rk")
         r_aff = c1.text_input("楽天 アフィリエイトID (任意)", type="password", key="f_ra", help="未入力の場合は通常リンクになります。")
         
         g_key = c2.text_input("Gemini API", type="password", key="f_gk")
