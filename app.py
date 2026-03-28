@@ -136,7 +136,6 @@ def get_rakuten_ranking(app_id, access_key, affiliate_id, genre_id):
     except Exception as e:
         return []
 
-# 🌟 引数に custom_prompt を追加し、プロンプトに結合
 def generate_post_text(item_name, price, target_str, tone, length, custom_prompt, api_key, image=None):
     client = genai.Client(api_key=api_key)
     prompt = f"""楽天商品「{item_name}」({price}円)を、ターゲット【{target_str}】に向けて、{tone}なテイストで約{length}文字で紹介してください。
@@ -146,7 +145,6 @@ def generate_post_text(item_name, price, target_str, tone, length, custom_prompt
 ・AIが書いたような無難で不自然な表現は避け、まるで友人が興奮して勧めているような、人間味のあるリアルな言葉を使うこと。
 ・読んだ人が思わず「なにこれ！」「気になる！」とタップしたくなるような、好奇心をくすぐる魅力的なフックを入れること。"""
 
-    # 自由入力欄に文字があれば、特別指示として追加する
     if custom_prompt:
         prompt += f"\n\n【特別追加指示（必ず守ること）】\n{custom_prompt}"
 
@@ -305,25 +303,17 @@ elif page == "3. エンゲージメント分析":
             df = df[df['is_reply'] != True]
             df = df[~df['text'].astype(str).str.contains("▼ 詳細はこちら", na=False)]
 
-            st.subheader("📊 今週のパフォーマンス (過去7日間 vs 前週)")
-            today = datetime.now().date()
-            week_ago = today - timedelta(days=7)
-            two_weeks_ago = today - timedelta(days=14)
+            # 🌟 今週比較を廃止し、純粋な累計パフォーマンスに変更
+            st.subheader("📊 累計パフォーマンス")
 
-            df_this_week = df[(df['timestamp'] > week_ago) & (df['timestamp'] <= today)]
-            tw_likes = df_this_week['like_count'].sum()
-            tw_views = df_this_week['views'].sum()
-            tw_replies = df_this_week['reply_count'].sum()
-
-            df_last_week = df[(df['timestamp'] > two_weeks_ago) & (df['timestamp'] <= week_ago)]
-            lw_likes = df_last_week['like_count'].sum()
-            lw_views = df_last_week['views'].sum()
-            lw_replies = df_last_week['reply_count'].sum()
+            total_likes = df['like_count'].sum()
+            total_views = df['views'].sum()
+            total_replies = df['reply_count'].sum()
 
             c1, c2, c3 = st.columns(3)
-            with c1: st.metric("👀 今週の閲覧数", f"{tw_views:,}", f"{tw_views - lw_views:,} (先週比)")
-            with c2: st.metric("❤️ 今週のいいね", f"{tw_likes:,}", f"{tw_likes - lw_likes:,} (先週比)")
-            with c3: st.metric("💬 今週のコメント", f"{tw_replies:,}", f"{tw_replies - lw_replies:,} (先週比)")
+            with c1: st.metric("👀 累計閲覧数", f"{total_views:,}")
+            with c2: st.metric("❤️ 累計いいね数", f"{total_likes:,}")
+            with c3: st.metric("💬 累計コメント数", f"{total_replies:,}")
 
             st.divider()
 
@@ -389,7 +379,6 @@ elif page == "2. 商品作成＆予約":
                 with st.container(border=True):
                     st.subheader("ターゲット・文章設定")
                     
-                    # 🌟 UIを整理して文字数の設定値を変更
                     c1, c2, c3 = st.columns(3)
                     with c1: gender = st.radio("性別", ["女性", "男性", "指定なし"], key="r_gen")
                     with c2: age = st.multiselect("年代", ["10代", "20代", "30代", "40代", "50代〜"], default=["20代", "30代"], key="m_age")
@@ -397,9 +386,8 @@ elif page == "2. 商品作成＆予約":
                     
                     c4, c5 = st.columns(2)
                     with c4: tone = st.selectbox("トーン", ["エモい", "役立つ", "元気"], key="s_tone")
-                    with c5: length = st.slider("文字数", 10, 500, 50, step=10, key="s_len") # 10文字〜初期値50文字に
+                    with c5: length = st.slider("文字数", 10, 500, 50, step=10, key="s_len")
                     
-                    # 🌟 自由入力のプロンプト追加欄
                     custom_prompt = st.text_area("✍️ 自由な追加指示 (オプション)", placeholder="例: メリットを3つ箇条書きで入れて！ / 絵文字をたくさん使って！ など", key="c_prompt")
                     
                     if st.button(f"✨ {len(selected)}件の文章を生成", key="gen_btn_p2"):
@@ -408,7 +396,6 @@ elif page == "2. 商品作成＆予約":
                         pb = st.progress(0)
                         for j, s_item in enumerate(selected):
                             img_obj = Image.open(s_item["u_img"]) if s_item["u_img"] else None
-                            # 🌟 custom_prompt も関数に渡す
                             txt = generate_post_text(s_item["itemName"], s_item["itemPrice"], t_str, tone, length, custom_prompt, api["gemini"], img_obj)
                             res.append({"item": s_item, "text": txt})
                             pb.progress((j+1)/len(selected))
