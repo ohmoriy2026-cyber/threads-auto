@@ -303,7 +303,6 @@ elif page == "3. エンゲージメント分析":
             df = df[df['is_reply'] != True]
             df = df[~df['text'].astype(str).str.contains("▼ 詳細はこちら", na=False)]
 
-            # 🌟 今週比較を廃止し、純粋な累計パフォーマンスに変更
             st.subheader("📊 累計パフォーマンス")
 
             total_likes = df['like_count'].sum()
@@ -385,7 +384,12 @@ elif page == "2. 商品作成＆予約":
                     with c3: kids = st.radio("子供", ["なし", "未就学児", "小学生"], key="r_kids")
                     
                     c4, c5 = st.columns(2)
-                    with c4: tone = st.selectbox("トーン", ["エモい", "役立つ", "元気"], key="s_tone")
+                    # 🌟 トーンを10種類に大幅拡張！
+                    tone_list = [
+                        "エモい", "役立つ", "元気", "親近感 (友だち風)", "本音レビュー風", 
+                        "専門家 (プロ目線)", "ユーモア (面白く)", "あざと可愛い", "高級感 (エレガント)", "ズボラ・時短命"
+                    ]
+                    with c4: tone = st.selectbox("トーン", tone_list, key="s_tone")
                     with c5: length = st.slider("文字数", 10, 500, 50, step=10, key="s_len")
                     
                     custom_prompt = st.text_area("✍️ 自由な追加指示 (オプション)", placeholder="例: メリットを3つ箇条書きで入れて！ / 絵文字をたくさん使って！ など", key="c_prompt")
