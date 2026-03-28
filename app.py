@@ -187,7 +187,6 @@ if page == "1. ダッシュボード":
     if not api["sheet_id"] or not api["threads"]:
         st.info("💡 API設定でロードを行うと、ここにダッシュボードが表示されます。")
     else:
-        # --- 1. 本日の投稿予定 ---
         st.subheader("📅 本日の投稿予定")
         sheet_data = get_sheet_data(api["sheet_id"], api["g_json"])
         today_str = datetime.now().strftime('%Y/%m/%d')
@@ -207,7 +206,6 @@ if page == "1. ダッシュボード":
 
         st.divider()
 
-        # --- 2. 累計データとグラフ ---
         st.subheader("📈 アカウント総合状況 (直近100件)")
         threads_data = get_threads_engagement(api["threads"])
         
@@ -248,7 +246,6 @@ if page == "1. ダッシュボード":
 
             st.divider()
 
-            # --- 3. 高エンゲージトップ５ ---
             st.subheader("🏆 高エンゲージメント トップ5")
             df_main['total_eng'] = df_main['like_count'] + df_main['reply_count']
             
@@ -361,6 +358,10 @@ elif page == "2. 商品作成＆予約":
 
             if st.button("ランキング取得", key="get_rank_p2"):
                 st.session_state["items"] = get_rakuten_ranking(api["rakuten_id"], api["rakuten_key"], api["rakuten_aff_id"], target_id)
+                
+                # 🌟 【重要修正】ジャンルを変えたら、以前の生成結果を消去（リセット）する！
+                if "gen_res_p2" in st.session_state:
+                    del st.session_state["gen_res_p2"]
 
         if "items" in st.session_state:
             selected = []
@@ -384,7 +385,6 @@ elif page == "2. 商品作成＆予約":
                     with c3: kids = st.radio("子供", ["なし", "未就学児", "小学生"], key="r_kids")
                     
                     c4, c5 = st.columns(2)
-                    # 🌟 トーンを10種類に大幅拡張！
                     tone_list = [
                         "エモい", "役立つ", "元気", "親近感 (友だち風)", "本音レビュー風", 
                         "専門家 (プロ目線)", "ユーモア (面白く)", "あざと可愛い", "高級感 (エレガント)", "ズボラ・時短命"
