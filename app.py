@@ -34,7 +34,7 @@ st.markdown("""
         background-color: #FFFFFF !important; color: #1F2937 !important; border: 1px solid #D1D5DB !important; border-radius: 8px !important;
     }
     
-    /* ボタンデザイン（プライマリーカラーを爽やかなブルーに） */
+    /* ボタンデザイン */
     .stButton>button { 
         background-color: #007AFF !important; color: #FFFFFF !important; font-weight: bold; 
         border-radius: 8px; width: 100%; border: none; padding: 0.5rem 1rem; transition: all 0.2s;
@@ -60,7 +60,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# ⚙️ 関数群（安全なデータ抽出に修正）
+# ⚙️ 関数群
 # ==========================================
 def save_to_sheets(sheet_id, g_json, row_data):
     if not sheet_id or not g_json: return False
@@ -186,17 +186,22 @@ if page == "1. ダッシュボード":
         
         if threads_data:
             df = pd.DataFrame(threads_data)
-            # 安全に数値を取り出す処理
-            df['like_count'] = pd.to_numeric(df.get('like_count', 0), errors='coerce').fillna(0).astype(int)
-            df['reply_count'] = pd.to_numeric(df.get('reply_count', 0), errors='coerce').fillna(0).astype(int)
-            df['views'] = pd.to_numeric(df.get('views', 0), errors='coerce').fillna(0).astype(int)
+            
+            # 🌟 エラー回避：列が存在しない場合は強制的に0や空の列を作る
+            for col in ['like_count', 'reply_count', 'views']:
+                if col not in df.columns:
+                    df[col] = 0
+            if 'text' not in df.columns: df['text'] = ""
+            if 'timestamp' not in df.columns: df['timestamp'] = datetime.now().isoformat()
+            if 'is_reply' not in df.columns: df['is_reply'] = False
+
+            df['like_count'] = pd.to_numeric(df['like_count'], errors='coerce').fillna(0).astype(int)
+            df['reply_count'] = pd.to_numeric(df['reply_count'], errors='coerce').fillna(0).astype(int)
+            df['views'] = pd.to_numeric(df['views'], errors='coerce').fillna(0).astype(int)
             df['timestamp'] = pd.to_datetime(df['timestamp']).dt.date
             
             # リプライを除外したオリジナル投稿のみで集計
-            if 'is_reply' in df.columns:
-                df_main = df[df['is_reply'] != True]
-            else:
-                df_main = df
+            df_main = df[df['is_reply'] != True]
             df_main = df_main[~df_main['text'].astype(str).str.contains("▼ 詳細はこちら", na=False)]
 
             total_posts = len(df_main)
@@ -259,14 +264,22 @@ elif page == "3. エンゲージメント分析":
         threads_data = get_threads_engagement(api["threads"])
         if threads_data:
             df = pd.DataFrame(threads_data)
-            df['like_count'] = pd.to_numeric(df.get('like_count', 0), errors='coerce').fillna(0).astype(int)
-            df['reply_count'] = pd.to_numeric(df.get('reply_count', 0), errors='coerce').fillna(0).astype(int)
-            df['views'] = pd.to_numeric(df.get('views', 0), errors='coerce').fillna(0).astype(int)
+            
+            # 🌟 エラー回避：列が存在しない場合は強制的に0や空の列を作る
+            for col in ['like_count', 'reply_count', 'views']:
+                if col not in df.columns:
+                    df[col] = 0
+            if 'text' not in df.columns: df['text'] = ""
+            if 'timestamp' not in df.columns: df['timestamp'] = datetime.now().isoformat()
+            if 'is_reply' not in df.columns: df['is_reply'] = False
+
+            df['like_count'] = pd.to_numeric(df['like_count'], errors='coerce').fillna(0).astype(int)
+            df['reply_count'] = pd.to_numeric(df['reply_count'], errors='coerce').fillna(0).astype(int)
+            df['views'] = pd.to_numeric(df['views'], errors='coerce').fillna(0).astype(int)
             df['timestamp'] = pd.to_datetime(df['timestamp']).dt.date
             
             # リプライ除外
-            if 'is_reply' in df.columns:
-                df = df[df['is_reply'] != True]
+            df = df[df['is_reply'] != True]
             df = df[~df['text'].astype(str).str.contains("▼ 詳細はこちら", na=False)]
 
             # --- サマリと先週対比 ---
