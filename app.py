@@ -3,43 +3,64 @@ import requests
 from google import genai
 import time
 from PIL import Image
-from datetime import datetime
+from datetime import datetime, timedelta
 import gspread
 from google.oauth2.service_account import Credentials
 import json
 import pandas as pd
 
 # ==========================================
-# 🎨 デザイン・カスタムCSS
+# 🎨 デザイナー設計：モダン・クリーンUI (白基調)
 # ==========================================
-st.set_page_config(page_title="Threads Marketing Pro", layout="wide")
+st.set_page_config(page_title="Threads Marketing Pro", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
-    .stApp, .main { background-color: #1A1A1D !important; }
-    [data-testid="stSidebar"] { background-color: #242429 !important; border-right: 1px solid #3A3A40; }
-    [data-testid="stVerticalBlockBorderWrapper"] { 
-        background-color: #26262B !important; border: 1px solid #3A3A40 !important; border-radius: 12px; padding: 20px; margin-bottom: 10px;
-    }
-    div[data-baseweb="input"], div[data-baseweb="textarea"], div[data-baseweb="select"], div[data-baseweb="base-input"],
-    input, textarea, select, .stSelectbox div {
-        background-color: #000000 !important; color: #FFFFFF !important; border: 1px solid #4A4A55 !important; border-radius: 8px !important;
-    }
-    div[role="listbox"], div[data-baseweb="popover"], div[data-baseweb="calendar"] {
-        background-color: #000000 !important; color: #FFFFFF !important;
-    }
-    ::placeholder { color: #888888 !important; }
-    label, p, h1, h2, h3, .stMarkdown { color: #F0F0F0 !important; font-weight: bold; }
-    .stButton>button { background-color: #00E5FF !important; color: #000000 !important; font-weight: bold; border-radius: 8px; width: 100%; border: none; }
-    [data-testid="stDataFrame"] { background-color: #000000 !important; border-radius: 8px; }
+    /* 全体の背景とテキスト */
+    .stApp { background-color: #F8F9FA !important; }
+    .main { background-color: #F8F9FA !important; color: #333333 !important; font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; }
     
-    .ranking-box { background-color: #121214; border: 1px solid #00E5FF; border-radius: 10px; padding: 15px; margin-bottom: 10px; }
-    .ranking-rank { font-size: 24px; font-weight: bold; color: #00E5FF; }
+    /* サイドバー */
+    [data-testid="stSidebar"] { background-color: #FFFFFF !important; border-right: 1px solid #E5E7EB; }
+    
+    /* コンテナ（枠線・影） */
+    [data-testid="stVerticalBlockBorderWrapper"] { 
+        background-color: #FFFFFF !important; border: 1px solid #E5E7EB !important; 
+        border-radius: 12px; padding: 20px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    }
+    
+    /* 入力フォーム群 */
+    div[data-baseweb="input"], div[data-baseweb="textarea"], div[data-baseweb="select"], input, textarea, select {
+        background-color: #FFFFFF !important; color: #1F2937 !important; border: 1px solid #D1D5DB !important; border-radius: 8px !important;
+    }
+    
+    /* ボタンデザイン（プライマリーカラーを爽やかなブルーに） */
+    .stButton>button { 
+        background-color: #007AFF !important; color: #FFFFFF !important; font-weight: bold; 
+        border-radius: 8px; width: 100%; border: none; padding: 0.5rem 1rem; transition: all 0.2s;
+    }
+    .stButton>button:hover { background-color: #0056b3 !important; transform: translateY(-1px); box-shadow: 0 4px 6px rgba(0,122,255,0.2); }
+    
+    /* メトリクス（数値）のデザイン */
+    [data-testid="stMetricValue"] { font-size: 2rem !important; font-weight: 800 !important; color: #111827 !important; }
+    [data-testid="stMetricLabel"] { font-size: 1rem !important; font-weight: 600 !important; color: #6B7280 !important; }
+    
+    /* テーブルのデザイン */
+    [data-testid="stDataFrame"] { background-color: #FFFFFF !important; border-radius: 8px; border: 1px solid #E5E7EB; }
+    
+    /* トップ5ランキング専用スタイル */
+    .ranking-box {
+        background-color: #FFFFFF; border-left: 5px solid #007AFF; border-radius: 8px; 
+        padding: 15px 20px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border-top: 1px solid #F3F4F6; border-right: 1px solid #F3F4F6; border-bottom: 1px solid #F3F4F6;
+    }
+    .ranking-rank { font-size: 20px; font-weight: 900; color: #007AFF; margin-right: 10px; }
+    .ranking-text { color: #374151; font-size: 15px; line-height: 1.5; margin: 10px 0; font-weight: 500;}
+    .stat-badge { display: inline-block; background: #F3F4F6; padding: 4px 10px; border-radius: 20px; font-size: 13px; font-weight: bold; margin-right: 8px; color: #4B5563; }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# ⚙️ 関数群
+# ⚙️ 関数群（安全なデータ抽出に修正）
 # ==========================================
 def save_to_sheets(sheet_id, g_json, row_data):
     if not sheet_id or not g_json: return False
@@ -79,16 +100,9 @@ def get_rakuten_ranking(app_id, access_key, affiliate_id, genre_id):
     if not app_id or not access_key:
         st.error("楽天 App ID または Access Key が設定されていません。")
         return []
-        
     url = "https://openapi.rakuten.co.jp/ichibaranking/api/IchibaItem/Ranking/20220601"
-    params = {
-        "applicationId": str(app_id).strip(),
-        "accessKey": str(access_key).strip(),
-        "genreId": str(genre_id).strip()
-    }
-    if affiliate_id and str(affiliate_id).strip():
-        params["affiliateId"] = str(affiliate_id).strip()
-        
+    params = {"applicationId": str(app_id).strip(), "accessKey": str(access_key).strip(), "genreId": str(genre_id).strip()}
+    if affiliate_id and str(affiliate_id).strip(): params["affiliateId"] = str(affiliate_id).strip()
     try:
         res = requests.get(url, params=params, headers={"Referer": "https://localhost/"})
         if res.status_code != 200:
@@ -99,7 +113,6 @@ def get_rakuten_ranking(app_id, access_key, affiliate_id, genre_id):
         st.error(f"❌ 通信エラー: {e}")
         return []
 
-# 🌟 プロンプトを大幅改良！人間味と好奇心を煽るフックを重視
 def generate_post_text(item_name, price, target_str, tone, length, api_key, image=None):
     client = genai.Client(api_key=api_key)
     prompt = f"""楽天商品「{item_name}」({price}円)を、ターゲット【{target_str}】に向けて、{tone}なテイストで約{length}文字で紹介してください。
@@ -135,101 +148,170 @@ if "api_keys" not in st.session_state:
         "gemini": "", "threads": "", "sheet_id": "", "g_json": ""
     }
 
-page = st.sidebar.radio("メニュー", ["1. ダッシュボード", "2. 商品作成＆予約", "4. API設定"])
+page = st.sidebar.radio("メニュー", ["1. ダッシュボード", "2. 商品作成＆予約", "3. エンゲージメント分析", "4. API設定"])
 
-# ------------------------------------------
-# 📊 1. ダッシュボードページ
-# ------------------------------------------
+# ==========================================
+# 📊 1. ダッシュボード
+# ==========================================
 if page == "1. ダッシュボード":
-    st.title("📊 アナリティクス・ダッシュボード")
+    st.title("📊 ダッシュボード")
     api = st.session_state["api_keys"]
 
     if not api["sheet_id"] or not api["threads"]:
-        st.info("💡 API設定でロードを行うと、ここにアナリティクスが表示されます。")
+        st.info("💡 API設定でロードを行うと、ここにダッシュボードが表示されます。")
     else:
-        st.subheader("❤️ Threads エンゲージメント集計 (過去100件)")
+        # --- 本日の投稿予定 ---
+        st.subheader("📅 本日の投稿予定")
+        sheet_data = get_sheet_data(api["sheet_id"], api["g_json"])
+        today_str = datetime.now().strftime('%Y/%m/%d')
+        
+        if sheet_data:
+            today_pending = [r for r in sheet_data if r.get("投稿チェック", "") in ["pending", "予約中", ""] and r.get("投稿日", "") == today_str]
+            if today_pending:
+                preview_list = []
+                for p in today_pending:
+                    dt_str = f"{p.get('時','')}:{p.get('分','')}"
+                    preview_list.append({"予定時間": dt_str, "本文プレビュー": p.get('本文', '')[:40] + "..."})
+                st.dataframe(preview_list, use_container_width=True, hide_index=True)
+            else:
+                st.success("本日の待機中の投稿はありません。")
+        else:
+            st.warning("スプレッドシートからデータを取得できませんでした。")
+
+        st.divider()
+
+        # --- 累計データとグラフ ---
+        st.subheader("📈 アカウント総合状況 (直近100件)")
         threads_data = get_threads_engagement(api["threads"])
         
         if threads_data:
             df = pd.DataFrame(threads_data)
-            for col in ['like_count', 'reply_count', 'views']:
-                if col not in df.columns: df[col] = 0
-            if 'text' not in df.columns: df['text'] = ""
-            if 'timestamp' not in df.columns: df['timestamp'] = datetime.now().isoformat()
-
-            df['like_count'] = pd.to_numeric(df['like_count'], errors='coerce').fillna(0).astype(int)
-            df['reply_count'] = pd.to_numeric(df['reply_count'], errors='coerce').fillna(0).astype(int)
-            df['views'] = pd.to_numeric(df['views'], errors='coerce').fillna(0).astype(int)
+            # 安全に数値を取り出す処理
+            df['like_count'] = pd.to_numeric(df.get('like_count', 0), errors='coerce').fillna(0).astype(int)
+            df['reply_count'] = pd.to_numeric(df.get('reply_count', 0), errors='coerce').fillna(0).astype(int)
+            df['views'] = pd.to_numeric(df.get('views', 0), errors='coerce').fillna(0).astype(int)
             df['timestamp'] = pd.to_datetime(df['timestamp']).dt.date
             
-            total_likes = df['like_count'].sum()
-            total_replies = df['reply_count'].sum()
-            total_views = df['views'].sum()
-            
-            ec1, ec2, ec3, ec4 = st.columns(4)
-            with ec1: st.metric("📝 対象投稿数", f"{len(threads_data)} 件")
-            with ec2: st.metric("👀 累計閲覧数", f"{total_views:,} 回")
-            with ec3: st.metric("❤️ 累計いいね数", f"{total_likes:,} 回")
-            with ec4: st.metric("💬 累計コメント数", f"{total_replies:,} 件")
-
-            st.divider()
-
-            st.subheader("🏆 反響が大きかった投稿 トップ5 (リプライを除く)")
-            
-            ranking_df = df.copy()
-            if 'is_reply' in ranking_df.columns:
-                ranking_df = ranking_df[ranking_df['is_reply'] != True]
-            ranking_df = ranking_df[~ranking_df['text'].astype(str).str.contains("▼ 詳細はこちら", na=False)]
-
-            ranking_df['total_eng'] = ranking_df['like_count'] + ranking_df['reply_count']
-            
-            if not ranking_df.empty:
-                top5_df = ranking_df.sort_values(by='total_eng', ascending=False).head(5)
-
-                for i, row in top5_df.iterrows():
-                    with st.container():
-                        st.markdown(f"""
-                        <div class="ranking-box">
-                            <span class="ranking-rank">#{top5_df.index.get_loc(i) + 1}</span> &nbsp;&nbsp;
-                            <span style="color:#888;">{row['timestamp']}</span><br>
-                            <p style="color:#FFF; font-size:16px;">{row['text'][:100] if row['text'] else '[画像のみ/返信]'}</p>
-                            <span style="color:#00E5FF;">👀 {row['views']:,}</span> &nbsp;&nbsp;
-                            <span style="color:#F0F;">❤️ {row['like_count']}</span> &nbsp;&nbsp;
-                            <span style="color:#FF0;">💬 {row['reply_count']}</span>
-                        </div>
-                        """, unsafe_allow_html=True)
+            # リプライを除外したオリジナル投稿のみで集計
+            if 'is_reply' in df.columns:
+                df_main = df[df['is_reply'] != True]
             else:
-                st.info("ランキングに表示できるオリジナル投稿がまだありません。")
-            
+                df_main = df
+            df_main = df_main[~df_main['text'].astype(str).str.contains("▼ 詳細はこちら", na=False)]
+
+            total_posts = len(df_main)
+            total_likes = df_main['like_count'].sum()
+            total_replies = df_main['reply_count'].sum()
+
+            c1, c2, c3 = st.columns(3)
+            with c1: 
+                st.metric("📝 累計投稿数 (オリジナル)", f"{total_posts} 件")
+                post_counts = df_main.groupby('timestamp').size()
+                st.bar_chart(post_counts, height=150)
+            with c2: 
+                st.metric("❤️ 累計いいね数", f"{total_likes:,} 回")
+                like_counts = df_main.groupby('timestamp')['like_count'].sum()
+                st.line_chart(like_counts, height=150, color="#FF4B4B")
+            with c3: 
+                st.metric("💬 累計リプライ獲得数", f"{total_replies:,} 件")
+                reply_counts = df_main.groupby('timestamp')['reply_count'].sum()
+                st.line_chart(reply_counts, height=150, color="#FFB800")
+
             st.divider()
 
-            st.subheader("📈 日別エンゲージメント推移 (いいね + 返信)")
-            daily_eng = df.groupby('timestamp')[['like_count', 'reply_count']].sum()
-            st.line_chart(daily_eng)
-
+            # --- 高エンゲージトップ5 ---
+            st.subheader("🏆 高エンゲージメント トップ5")
+            df_main['total_eng'] = df_main['like_count'] + df_main['reply_count']
+            
+            if not df_main.empty:
+                top5_df = df_main.sort_values(by='total_eng', ascending=False).head(5)
+                for i, row in top5_df.iterrows():
+                    st.markdown(f"""
+                    <div class="ranking-box">
+                        <div>
+                            <span class="ranking-rank">#{top5_df.index.get_loc(i) + 1}</span>
+                            <span style="color:#9CA3AF; font-size: 14px;">{row['timestamp']}</span>
+                        </div>
+                        <p class="ranking-text">{row['text'] if row['text'] else '[画像のみ]'}</p>
+                        <div>
+                            <span class="stat-badge">👀 閲覧: {row['views']:,}</span>
+                            <span class="stat-badge">❤️ いいね: {row['like_count']:,}</span>
+                            <span class="stat-badge">💬 コメント: {row['reply_count']:,}</span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.info("データがありません。")
         else:
             st.info("Threadsからデータを取得できませんでした。")
 
-        st.divider()
 
-        st.subheader("⚙️ 自動投稿の待機状況")
-        sheet_data = get_sheet_data(api["sheet_id"], api["g_json"])
-        if sheet_data:
-            pending_items = [r for r in sheet_data if r.get("投稿チェック", "") in ["pending", "予約中", ""]]
-            st.metric("⏳ 予約待ち（待機中）", f"{len(pending_items)} 件")
-            if pending_items:
-                preview_list = []
-                for p in pending_items[:5]:
-                    dt_str = f"{p.get('投稿日','')} {p.get('時','')}:{p.get('分','')}"
-                    txt_prev = p.get('本文', '')[:30] + "..."
-                    preview_list.append({"予定日時": dt_str, "本文": txt_prev})
-                st.dataframe(preview_list, use_container_width=True)
+# ==========================================
+# 🔍 3. エンゲージメント分析 (新設ページ)
+# ==========================================
+elif page == "3. エンゲージメント分析":
+    st.title("🔍 エンゲージメント分析")
+    api = st.session_state["api_keys"]
+
+    if not api["threads"]:
+        st.info("💡 API設定でロードを行ってください。")
+    else:
+        threads_data = get_threads_engagement(api["threads"])
+        if threads_data:
+            df = pd.DataFrame(threads_data)
+            df['like_count'] = pd.to_numeric(df.get('like_count', 0), errors='coerce').fillna(0).astype(int)
+            df['reply_count'] = pd.to_numeric(df.get('reply_count', 0), errors='coerce').fillna(0).astype(int)
+            df['views'] = pd.to_numeric(df.get('views', 0), errors='coerce').fillna(0).astype(int)
+            df['timestamp'] = pd.to_datetime(df['timestamp']).dt.date
+            
+            # リプライ除外
+            if 'is_reply' in df.columns:
+                df = df[df['is_reply'] != True]
+            df = df[~df['text'].astype(str).str.contains("▼ 詳細はこちら", na=False)]
+
+            # --- サマリと先週対比 ---
+            st.subheader("📊 今週のパフォーマンス (過去7日間 vs 前週)")
+            today = datetime.now().date()
+            week_ago = today - timedelta(days=7)
+            two_weeks_ago = today - timedelta(days=14)
+
+            # 今週のデータ
+            df_this_week = df[(df['timestamp'] > week_ago) & (df['timestamp'] <= today)]
+            tw_likes = df_this_week['like_count'].sum()
+            tw_views = df_this_week['views'].sum()
+            tw_replies = df_this_week['reply_count'].sum()
+
+            # 先週のデータ
+            df_last_week = df[(df['timestamp'] > two_weeks_ago) & (df['timestamp'] <= week_ago)]
+            lw_likes = df_last_week['like_count'].sum()
+            lw_views = df_last_week['views'].sum()
+            lw_replies = df_last_week['reply_count'].sum()
+
+            c1, c2, c3 = st.columns(3)
+            with c1: st.metric("今週の閲覧数", f"{tw_views:,}", f"{tw_views - lw_views:,} (先週比)")
+            with c2: st.metric("今週のいいね", f"{tw_likes:,}", f"{tw_likes - lw_likes:,} (先週比)")
+            with c3: st.metric("今週のコメント", f"{tw_replies:,}", f"{tw_replies - lw_replies:,} (先週比)")
+
+            st.divider()
+
+            # --- 全投稿データテーブル ---
+            st.subheader("📑 過去の投稿一覧 (全データ)")
+            st.write("各項目の見出しをクリックすると並び替えができます。")
+            
+            display_df = df[['timestamp', 'text', 'views', 'like_count', 'reply_count']].copy()
+            display_df.columns = ['投稿日', '投稿内容', '👀 閲覧数', '❤️ いいね', '💬 コメント']
+            # 見やすくするために文字数を制限
+            display_df['投稿内容'] = display_df['投稿内容'].apply(lambda x: str(x)[:60] + '...' if len(str(x)) > 60 else x)
+            
+            st.dataframe(display_df.sort_values(by='投稿日', ascending=False), use_container_width=True, hide_index=True)
+
         else:
-            st.warning("スプレッドシートの待機データを取得できませんでした。")
+            st.info("Threadsデータが取得できませんでした。")
 
-# ------------------------------------------
+
+# ==========================================
 # 🛒 2. 商品作成＆予約ページ
-# ------------------------------------------
+# ==========================================
 elif page == "2. 商品作成＆予約":
     st.title("🛒 商品作成 ＆ 予約")
     api = st.session_state["api_keys"]
@@ -255,7 +337,7 @@ elif page == "2. 商品作成＆予約":
             
             target_id = genres_dict[sel_name]
             if target_id == "custom":
-                target_id = st.text_input("楽天ジャンルIDを入力してください（例: 211742）", key="custom_id_in")
+                target_id = st.text_input("楽天ジャンルIDを入力してください", key="custom_id_in")
 
             if st.button("ランキング取得", key="get_rank_p2"):
                 st.session_state["items"] = get_rakuten_ranking(api["rakuten_id"], api["rakuten_key"], api["rakuten_aff_id"], target_id)
@@ -320,9 +402,9 @@ elif page == "2. 商品作成＆予約":
                                 st.balloons()
                                 st.success(f"✅ 保存しました！ ({d} {t})")
 
-# ------------------------------------------
+# ==========================================
 # ⚙️ 4. API設定ページ
-# ------------------------------------------
+# ==========================================
 elif page == "4. API設定":
     st.title("⚙️ API設定")
     with st.expander("👤 管理者モード", expanded=True):
@@ -347,7 +429,7 @@ elif page == "4. API設定":
         c1, c2 = st.columns(2)
         r_id = c1.text_input("楽天 App ID", type="password", key="f_ri")
         r_key = c1.text_input("楽天 Access Key", type="password", key="f_rk")
-        r_aff = c1.text_input("楽天 アフィリエイトID (任意)", type="password", key="f_ra", help="未入力の場合は通常リンクになります。")
+        r_aff = c1.text_input("楽天 アフィリエイトID (任意)", type="password", key="f_ra")
         
         g_key = c2.text_input("Gemini API", type="password", key="f_gk")
         t_tok = c2.text_input("Threads Token", type="password", key="f_tt")
@@ -360,4 +442,4 @@ elif page == "4. API設定":
                 "rakuten_id":r_id, "rakuten_key":r_key, "rakuten_aff_id":r_aff, 
                 "gemini":g_key, "threads":t_tok, "sheet_id":s_id, "g_json":g_js
             })
-            st.success("設定を保存しました！商品作成ページへ進んでください。")
+            st.success("設定を保存しました！")
