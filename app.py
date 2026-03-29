@@ -129,22 +129,18 @@ def get_rakuten_ranking(app_id, access_key, affiliate_id, genre_id):
     except Exception as e:
         return []
 
-# 🌟 大幅改修: ロボット回避強化 ＆ 失敗してもエラーにせず「手動入力モード」にする
 def get_item_info_from_url(url):
     default_info = {"itemName": "", "imageUrl": "", "itemUrl": url, "itemPrice": ""}
     try:
-        # 人間のブラウザ（Google Chrome）のフリをしてアクセスする
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept-Language': 'ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7',
         }
-        # 短縮URL（a.r10.toなど）のジャンプ先を追跡する
         session = requests.Session()
         res = session.get(url, headers=headers, timeout=10, allow_redirects=True)
         res.encoding = res.apparent_encoding
         html = res.text
         
-        # 最終的にたどり着いた本当のURLを取得
         final_url = res.url
         
         t_m = re.search(r'<title>(.*?)</title>', html, re.IGNORECASE | re.DOTALL)
@@ -155,11 +151,11 @@ def get_item_info_from_url(url):
         image = i_m.group(1) if i_m else ""
         
         if not title:
-            return default_info # 取得できなくても空のデータを返す（手動入力へ）
+            return default_info
             
         return {"itemName": title[:100], "imageUrl": image, "itemUrl": final_url, "itemPrice": ""}
     except Exception:
-        return default_info # 通信エラーでも空のデータを返す（手動入力へ）
+        return default_info
 
 def create_affiliate_url(url, aff_id):
     if not aff_id: return url
@@ -168,7 +164,6 @@ def create_affiliate_url(url, aff_id):
 
 def generate_post_text(item_name, price, target_str, tone, length, custom_prompt, api_key, image=None):
     client = genai.Client(api_key=api_key)
-    # 🌟 商品名が空っぽの場合は、「画像」や「プロンプト」だけを頼りに生成させる
     safe_item_name = item_name if item_name else "画像の商品"
     
     prompt = f"""楽天商品「{safe_item_name}」({price}円)を、ターゲット【{target_str}】に向けて、{tone}なテイストで約{length}文字で紹介してください。
@@ -354,6 +349,12 @@ elif page == "2. 商品作成＆予約":
     if not api["rakuten_id"]: 
         st.warning("API設定を先に済ませてください。")
     else:
+        # 🌟 トーンリストを共通部分に移動しました！
+        tone_list = [
+            "エモい", "役立つ", "元気", "親近感 (友だち風)", "本音レビュー風", 
+            "専門家 (プロ目線)", "ユーモア (面白く)", "あざと可愛い", "高級感 (エレガント)", "ズボラ・時短命"
+        ]
+
         tab1, tab2 = st.tabs(["🏆 ランキングから探す", "🔗 商品URLから作る"])
 
         # ------------------------------------
@@ -407,7 +408,6 @@ elif page == "2. 商品作成＆予約":
                         with c3: kids = st.radio("子供", ["なし", "未就学児", "小学生"], key="r_kids")
                         
                         c4, c5 = st.columns(2)
-                        tone_list = ["エモい", "役立つ", "元気", "親近感 (友だち風)", "本音レビュー風", "専門家 (プロ目線)", "ユーモア (面白く)", "あざと可愛い", "高級感 (エレガント)", "ズボラ・時短命"]
                         with c4: tone = st.selectbox("トーン", tone_list, key="s_tone")
                         with c5: length = st.slider("文字数", 10, 500, 50, step=10, key="s_len")
                         
@@ -463,7 +463,6 @@ elif page == "2. 商品作成＆予約":
                     if input_url:
                         with st.spinner("商品ページから情報を取得しています..."):
                             info = get_item_info_from_url(input_url)
-                            # 🌟 ブロックされた場合でも、空の枠を表示して手動で進められるようにする
                             if not info["itemName"]:
                                 st.warning("⚠️ 楽天のセキュリティにより自動取得がブロックされました。お手数ですが、以下の枠に商品名などを手動で入力してください！")
                             st.session_state["url_item"] = info
@@ -478,7 +477,6 @@ elif page == "2. 商品作成＆予約":
                 if item["imageUrl"]: c1.image(item["imageUrl"])
                 else: c1.info("Web画像なし（ご自身の写真をアップロードしてください）")
                 
-                # 手動で自由に書き換え可能！
                 edit_name = c2.text_input("商品名（AIに伝わりやすいように編集できます）", value=item["itemName"], key="edit_name")
                 edit_price = c2.text_input("価格（任意）", value=item["itemPrice"], key="edit_price")
                 u_img_tab2 = c2.file_uploader("オリジナルの写真を使う場合（必須ではありません）", type=["jpg","png"], key="u_img_tab2")
