@@ -130,7 +130,6 @@ def get_rakuten_ranking(app_id, access_key, affiliate_id, genre_id):
     except Exception as e:
         return []
 
-# 🌟 新規追加：URLから商品の名前と画像を自動取得する関数
 def get_item_info_from_url(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
@@ -140,7 +139,7 @@ def get_item_info_from_url(url):
         
         t_m = re.search(r'<title>(.*?)</title>', html, re.IGNORECASE | re.DOTALL)
         title = t_m.group(1).strip() if t_m else "商品名を取得できませんでした"
-        title = title.replace("【楽天市場】", "").split("：")[0].strip() # 楽天のタイトルを綺麗にする
+        title = title.replace("【楽天市場】", "").split("：")[0].strip()
         
         i_m = re.search(r'<meta\s+property="og:image"\s+content="(.*?)"', html, re.IGNORECASE)
         image = i_m.group(1) if i_m else ""
@@ -149,7 +148,6 @@ def get_item_info_from_url(url):
     except:
         return None
 
-# 🌟 新規追加：商品URLから自分のアフィリエイトリンクを生成する関数
 def create_affiliate_url(url, aff_id):
     if not aff_id: return url
     encoded_url = urllib.parse.quote(url, safe='')
@@ -340,21 +338,27 @@ elif page == "2. 商品作成＆予約":
     if not api["rakuten_id"]: 
         st.warning("API設定を先に済ませてください。")
     else:
-        # 🌟 タブで画面を分割！
         tab1, tab2 = st.tabs(["🏆 ランキングから探す", "🔗 商品URLから作る"])
 
         # ------------------------------------
-        # タブ1：ランキングから探す（既存の機能）
+        # タブ1：ランキングから探す
         # ------------------------------------
         with tab1:
             st.write("人気のランキングから商品を一括で探して作成します。")
             with st.container(border=True):
+                # 🌟 全34ジャンル復活！
                 genres_dict = {
                     "🏆 総合ランキング": "0", "👗 レディースファッション": "100371", "👔 メンズファッション": "551177",
                     "👜 バッグ・小物・ブランド雑貨": "216129", "👟 靴": "558885", "⌚ 腕時計": "558929",
                     "💎 ジュエリー・アクセサリー": "200162", "💄 美容・コスメ・香水": "100939", "💊 ダイエット・健康": "100143",
                     "🏥 医薬品・コンタクト・介護": "551169", "🍎 食品": "100227", "🍪 スイーツ・お菓子": "551167",
-                    "🍹 水・ソフトドリンク": "100316", "🔌 家電": "562631", "🍼 キッズ・ベビー・マタニティ": "100533",
+                    "🍹 水・ソフトドリンク": "100316", "🍺 ビール・洋酒": "510915", "🍶 日本酒・焼酎": "510901",
+                    "🛋 インテリア・寝具・収納": "100804", "🍳 キッチン・食器・調理器具": "558944", "🧼 日用品・文房具・手芸": "215783",
+                    "🔌 家電": "562631", "📸 TV・オーディオ・カメラ": "211742", "💻 パソコン・周辺機器": "100026",
+                    "📱 スマフォ・タブレット": "562637", "⚽ スポーツ・アウトドア": "101070", "⛳ ゴルフ用品": "101077",
+                    "🚗 車・バイク用品": "503190", "🧸 おもちゃ": "101164", "🎨 ホビー": "101165",
+                    "🎸 楽器・音響機器": "112493", "🐱 ペット・ペットグッズ": "101213", "🍼 キッズ・ベビー・マタニティ": "100533",
+                    "📚 本・雑誌・コミック": "200376", "📀 CD・DVD": "101240", "🎮 TVゲーム": "101205",
                     "🔧 その他 (ID指定)": "custom"
                 }
                 sel_name = st.selectbox("ランキングを取得したいジャンルを選択", list(genres_dict.keys()), key="sel_genre_p2")
@@ -365,7 +369,7 @@ elif page == "2. 商品作成＆予約":
 
                 if st.button("ランキング取得", key="get_rank_p2"):
                     st.session_state["items"] = get_rakuten_ranking(api["rakuten_id"], api["rakuten_key"], api["rakuten_aff_id"], target_id)
-                    if "gen_res_p2" in st.session_state: del st.session_state["gen_res_p2"] # キャッシュリセット
+                    if "gen_res_p2" in st.session_state: del st.session_state["gen_res_p2"]
 
             if "items" in st.session_state:
                 selected = []
@@ -433,7 +437,7 @@ elif page == "2. 商品作成＆予約":
                                     st.success(f"✅ 保存しました！ ({d} {t})")
 
         # ------------------------------------
-        # 🌟 タブ2：商品URLから作る（新機能！）
+        # タブ2：商品URLから作る
         # ------------------------------------
         with tab2:
             st.write("楽天の商品ページのURLを直接貼り付けて、自分だけの商品紹介を作ります。")
@@ -446,7 +450,7 @@ elif page == "2. 商品作成＆予約":
                             info = get_item_info_from_url(input_url)
                             if info:
                                 st.session_state["url_item"] = info
-                                if "gen_res_tab2" in st.session_state: del st.session_state["gen_res_tab2"] # キャッシュリセット
+                                if "gen_res_tab2" in st.session_state: del st.session_state["gen_res_tab2"]
                             else:
                                 st.error("情報の取得に失敗しました。正しい楽天のURLか確認してください。")
             
