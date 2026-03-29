@@ -45,7 +45,6 @@ st.markdown("""
         display: inline-block; background: rgba(128,128,128, 0.15); padding: 4px 10px; 
         border-radius: 20px; font-size: 13px; font-weight: bold; margin-right: 8px; 
     }
-    /* タブのデザインを少しリッチに */
     [data-testid="stTabs"] button { font-size: 16px; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
@@ -130,23 +129,37 @@ def get_rakuten_ranking(app_id, access_key, affiliate_id, genre_id):
     except Exception as e:
         return []
 
+# 🌟 大幅改修: ロボット回避強化 ＆ 失敗してもエラーにせず「手動入力モード」にする
 def get_item_info_from_url(url):
+    default_info = {"itemName": "", "imageUrl": "", "itemUrl": url, "itemPrice": ""}
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        res = requests.get(url, headers=headers, timeout=10)
+        # 人間のブラウザ（Google Chrome）のフリをしてアクセスする
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language': 'ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7',
+        }
+        # 短縮URL（a.r10.toなど）のジャンプ先を追跡する
+        session = requests.Session()
+        res = session.get(url, headers=headers, timeout=10, allow_redirects=True)
         res.encoding = res.apparent_encoding
         html = res.text
         
+        # 最終的にたどり着いた本当のURLを取得
+        final_url = res.url
+        
         t_m = re.search(r'<title>(.*?)</title>', html, re.IGNORECASE | re.DOTALL)
-        title = t_m.group(1).strip() if t_m else "商品名を取得できませんでした"
+        title = t_m.group(1).strip() if t_m else ""
         title = title.replace("【楽天市場】", "").split("：")[0].strip()
         
         i_m = re.search(r'<meta\s+property="og:image"\s+content="(.*?)"', html, re.IGNORECASE)
         image = i_m.group(1) if i_m else ""
         
-        return {"itemName": title[:100], "imageUrl": image, "itemUrl": url, "itemPrice": "価格を入力"}
-    except:
-        return None
+        if not title:
+            return default_info # 取得できなくても空のデータを返す（手動入力へ）
+            
+        return {"itemName": title[:100], "imageUrl": image, "itemUrl": final_url, "itemPrice": ""}
+    except Exception:
+        return default_info # 通信エラーでも空のデータを返す（手動入力へ）
 
 def create_affiliate_url(url, aff_id):
     if not aff_id: return url
@@ -155,7 +168,10 @@ def create_affiliate_url(url, aff_id):
 
 def generate_post_text(item_name, price, target_str, tone, length, custom_prompt, api_key, image=None):
     client = genai.Client(api_key=api_key)
-    prompt = f"""楽天商品「{item_name}」({price}円)を、ターゲット【{target_str}】に向けて、{tone}なテイストで約{length}文字で紹介してください。
+    # 🌟 商品名が空っぽの場合は、「画像」や「プロンプト」だけを頼りに生成させる
+    safe_item_name = item_name if item_name else "画像の商品"
+    
+    prompt = f"""楽天商品「{safe_item_name}」({price}円)を、ターゲット【{target_str}】に向けて、{tone}なテイストで約{length}文字で紹介してください。
 【条件】
 ・挨拶や前置きは一切不要、本文のみを出力すること。
 ・「詳細はこちら」などのURL誘導文は絶対に書かないこと。
@@ -346,7 +362,6 @@ elif page == "2. 商品作成＆予約":
         with tab1:
             st.write("人気のランキングから商品を一括で探して作成します。")
             with st.container(border=True):
-                # 🌟 全34ジャンル復活！
                 genres_dict = {
                     "🏆 総合ランキング": "0", "👗 レディースファッション": "100371", "👔 メンズファッション": "551177",
                     "👜 バッグ・小物・ブランド雑貨": "216129", "👟 靴": "558885", "⌚ 腕時計": "558929",
@@ -448,11 +463,11 @@ elif page == "2. 商品作成＆予約":
                     if input_url:
                         with st.spinner("商品ページから情報を取得しています..."):
                             info = get_item_info_from_url(input_url)
-                            if info:
-                                st.session_state["url_item"] = info
-                                if "gen_res_tab2" in st.session_state: del st.session_state["gen_res_tab2"]
-                            else:
-                                st.error("情報の取得に失敗しました。正しい楽天のURLか確認してください。")
+                            # 🌟 ブロックされた場合でも、空の枠を表示して手動で進められるようにする
+                            if not info["itemName"]:
+                                st.warning("⚠️ 楽天のセキュリティにより自動取得がブロックされました。お手数ですが、以下の枠に商品名などを手動で入力してください！")
+                            st.session_state["url_item"] = info
+                            if "gen_res_tab2" in st.session_state: del st.session_state["gen_res_tab2"]
             
             if "url_item" in st.session_state:
                 item = st.session_state["url_item"]
@@ -461,11 +476,12 @@ elif page == "2. 商品作成＆予約":
                 
                 c1, c2 = st.columns([1, 4])
                 if item["imageUrl"]: c1.image(item["imageUrl"])
-                else: c1.info("画像なし")
+                else: c1.info("Web画像なし（ご自身の写真をアップロードしてください）")
                 
+                # 手動で自由に書き換え可能！
                 edit_name = c2.text_input("商品名（AIに伝わりやすいように編集できます）", value=item["itemName"], key="edit_name")
                 edit_price = c2.text_input("価格（任意）", value=item["itemPrice"], key="edit_price")
-                u_img_tab2 = c2.file_uploader("オリジナルの写真を使う場合（AIの認識用）", type=["jpg","png"], key="u_img_tab2")
+                u_img_tab2 = c2.file_uploader("オリジナルの写真を使う場合（必須ではありません）", type=["jpg","png"], key="u_img_tab2")
                 
                 st.divider()
                 st.subheader("ターゲット・文章設定")
@@ -482,17 +498,20 @@ elif page == "2. 商品作成＆予約":
                 cp_t2 = st.text_area("✍️ 自由な追加指示 (オプション)", key="cp_t2")
                 
                 if st.button("✨ この商品の文章を生成", key="gen_btn_tab2"):
-                    t_str = f"{gen_t2}, 年代:{','.join(age_t2)}, 子供:{kids_t2}"
-                    img_obj_pass = Image.open(u_img_tab2) if u_img_tab2 else None
-                    
-                    with st.spinner("AIが執筆中..."):
-                        txt = generate_post_text(edit_name, edit_price, t_str, tone_t2, len_t2, cp_t2, api["gemini"], img_obj_pass)
-                        st.session_state["gen_res_tab2"] = {
-                            "text": txt,
-                            "itemName": edit_name,
-                            "target_url": create_affiliate_url(item["itemUrl"], api["rakuten_aff_id"]),
-                            "imageUrl": item["imageUrl"]
-                        }
+                    if not edit_name and not u_img_tab2:
+                        st.error("商品名を入力するか、画像をアップロードしてください！")
+                    else:
+                        t_str = f"{gen_t2}, 年代:{','.join(age_t2)}, 子供:{kids_t2}"
+                        img_obj_pass = Image.open(u_img_tab2) if u_img_tab2 else None
+                        
+                        with st.spinner("AIが執筆中..."):
+                            txt = generate_post_text(edit_name, edit_price, t_str, tone_t2, len_t2, cp_t2, api["gemini"], img_obj_pass)
+                            st.session_state["gen_res_tab2"] = {
+                                "text": txt,
+                                "itemName": edit_name,
+                                "target_url": create_affiliate_url(item["itemUrl"], api["rakuten_aff_id"]),
+                                "imageUrl": item["imageUrl"]
+                            }
 
             if "gen_res_tab2" in st.session_state:
                 p = st.session_state["gen_res_tab2"]
