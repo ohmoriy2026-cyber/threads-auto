@@ -272,7 +272,7 @@ if "api_keys" not in st.session_state:
         "gemini": "", "threads": "", "sheet_id": "", "g_json": ""
     }
 
-# 🌟 新メニュー追加！
+# 🌟 ここで「5. テンプレート管理」をメニューに追加しています！
 page = st.sidebar.radio("メニュー", ["1. ダッシュボード", "2. 商品作成＆予約", "3. エンゲージメント分析", "4. API設定", "5. テンプレート管理"])
 
 # ==========================================
@@ -436,7 +436,6 @@ elif page == "2. 商品作成＆予約":
         with tab1:
             st.write("人気のランキングから商品を一括で探して作成します。")
             with st.container(border=True):
-                # 全34ジャンル完全キープ！
                 genres_dict = {
                     "🏆 総合ランキング": "0", "👗 レディースファッション": "100371", "👔 メンズファッション": "551177",
                     "👜 バッグ・小物・ブランド雑貨": "216129", "👟 靴": "558885", "⌚ 腕時計": "558929",
@@ -485,7 +484,6 @@ elif page == "2. 商品作成＆予約":
                         with c4: tone = st.selectbox("トーン", tone_list, key="s_tone_p1")
                         with c5: length = st.slider("文字数", 10, 500, 50, step=10, key="s_len_p1")
                         
-                        # 🌟 テンプレート呼び出し機能
                         sel_temp_p1 = st.selectbox("🧠 バズ投稿テンプレートを呼び出す", template_options, key="sel_temp_p1")
                         if sel_temp_p1 == "手動で入力する":
                             ref_post_p1 = st.text_area("🧠 参考にするバズ投稿（手動入力）", placeholder="あのバズっている投稿の文章をコピペしてください", key="ref_post_p1")
@@ -580,7 +578,6 @@ elif page == "2. 商品作成＆予約":
                 with tc4: tone_t2 = st.selectbox("トーン", tone_list, key="s_tone_t2")
                 with tc5: len_t2 = st.slider("文字数", 10, 500, 50, step=10, key="s_len_t2")
                 
-                # 🌟 テンプレート呼び出し機能
                 sel_temp_t2 = st.selectbox("🧠 バズ投稿テンプレートを呼び出す", template_options, key="sel_temp_t2")
                 if sel_temp_t2 == "手動で入力する":
                     ref_post_t2 = st.text_area("🧠 参考にするバズ投稿（手動入力）", placeholder="あのバズっている投稿の文章をコピペしてください", key="ref_post_t2")
@@ -644,7 +641,7 @@ elif page == "5. テンプレート管理":
     api = st.session_state["api_keys"]
     
     if not api["sheet_id"] or not api["g_json"]:
-        st.warning("💡 API設定画面で Sheet ID と JSON を設定すると利用できます。")
+        st.warning("💡 API設定画面で Sheet ID と JSON を設定すると利用できます。（テンプレートはスプレッドシートに保存されます）")
     else:
         st.write("過去にバズった投稿の文体やテンポを「テンプレート」として保存しておけます。保存したテンプレートは「商品作成」画面でいつでも呼び出してAIに真似させることができます！")
         
