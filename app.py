@@ -379,7 +379,7 @@ elif page == "2. 商品作成＆予約":
                 show_final_ui("res_t2_final", st.session_state["res_t2"]["text"], aff_url_t2, st.session_state["item_t2"]["img"])
 
         with tab3:
-            st.info("💡 画像URLを読み込ませて本文を作成し、投稿します。")
+            st.info("💡 画像URLを読み込ませて本文を作成し、投稿します。時間がかかる、混雑時はエラーになる場合があります。")
             img_url_t3 = st.text_input("🔗 画像URLを入力 (Googleドライブ等)", key="url_tab3")
             hint_t3 = st.text_input("商品名のヒント (任意)", key="hint_tab3")
             t_str, tone, length, ref, cp = draw_ui("t3")
