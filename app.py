@@ -71,10 +71,11 @@ def create_affiliate_link(url, aff_id):
     encoded_url = urllib.parse.quote(url, safe='')
     return f"https://hb.afl.rakuten.co.jp/hgc/{aff_id}/?pc={encoded_url}"
 
+# 💡【修正】strict=False を追加してJSONの改行エラーを回避
 def save_to_sheets(sheet_id, g_json, row_data):
     if not sheet_id or not g_json: return False
     try:
-        creds = Credentials.from_service_account_info(json.loads(g_json), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
+        creds = Credentials.from_service_account_info(json.loads(g_json, strict=False), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
         gspread.authorize(creds).open_by_key(sheet_id).sheet1.append_row(row_data)
         return True
     except Exception as e:
@@ -84,7 +85,7 @@ def save_to_sheets(sheet_id, g_json, row_data):
 def get_sheet_data(sheet_id, g_json):
     if not sheet_id or not g_json: return []
     try:
-        creds = Credentials.from_service_account_info(json.loads(g_json), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
+        creds = Credentials.from_service_account_info(json.loads(g_json, strict=False), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
         data = gspread.authorize(creds).open_by_key(sheet_id).sheet1.get_all_values()
         if len(data) < 2: return []
         return [dict(zip(data[0], row)) for row in data[1:] if any(row)]
@@ -93,22 +94,20 @@ def get_sheet_data(sheet_id, g_json):
 def get_templates(sheet_id, g_json):
     if not sheet_id or not g_json: return []
     try:
-        creds = Credentials.from_service_account_info(json.loads(g_json), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
+        creds = Credentials.from_service_account_info(json.loads(g_json, strict=False), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
         ws = gspread.authorize(creds).open_by_key(sheet_id).worksheet("テンプレート")
         data = ws.get_all_values()
         return [{"title": row[0], "content": row[1]} for row in data[1:] if len(row) >= 2 and row[0]]
     except: return []
 
-# 💡 バグ修正箇所：rows=100, cols=2 を正しく数値として渡すよう修正しました
 def save_template(sheet_id, g_json, title, content):
     if not sheet_id or not g_json: return False
     try:
-        creds = Credentials.from_service_account_info(json.loads(g_json), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
+        creds = Credentials.from_service_account_info(json.loads(g_json, strict=False), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
         ss = gspread.authorize(creds).open_by_key(sheet_id)
         try: 
             ws = ss.worksheet("テンプレート")
         except: 
-            # ここが文字列だとエラーになり裏で止まっていました
             ws = ss.add_worksheet(title="テンプレート", rows=100, cols=2)
             ws.append_row(["タイトル", "本文"])
         ws.append_row([title, content])
@@ -436,6 +435,7 @@ elif page == "3. エンゲージメント分析":
             with c3: st.metric("💬 累計コメント数", f"{total_replies:,}")
 
             st.divider()
+
             st.subheader("📑 過去の投稿一覧 (全データ)")
             display_df = df[['timestamp', 'text', 'views', 'like_count', 'reply_count']].copy()
             display_df.columns = ['投稿日', '投稿内容', '👀 閲覧数', '❤️ いいね', '💬 コメント']
@@ -505,7 +505,7 @@ elif page == "5. テンプレート管理":
                         time.sleep(1)
                         st.rerun()
                     else:
-                        st.error("❌ 保存に失敗しました。")
+                        st.error("❌ 保存に失敗しました。JSONの形式が正しくない可能性があります。")
 
         st.divider()
         st.subheader("📚 登録済みのテンプレート")
