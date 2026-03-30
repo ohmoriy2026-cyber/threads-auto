@@ -9,7 +9,6 @@ hide_st_style = """
             .stAppDeployButton {display: none;}
             </style>
             """
-st.markdown(hide_st_style, unsafe_allow_html=True)
 import requests
 from google import genai
 import time
@@ -88,6 +87,46 @@ def get_sheet_data(sheet_id, g_json):
         headers = data[0]
         return [dict(zip(headers, row)) for row in data[1:] if any(row)]
     except: return []
+
+# 🌟 新機能：スプレッドシートからバズ投稿テンプレートを読み込む
+def get_templates(sheet_id, g_json):
+    if not sheet_id or not g_json: return []
+    try:
+        creds_dict = json.loads(g_json)
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        client = gspread.authorize(creds)
+        ss = client.open_by_key(sheet_id)
+        try:
+            ws = ss.worksheet("テンプレート")
+        except:
+            ws = ss.add_worksheet(title="テンプレート", rows="100", cols="2")
+            ws.append_row(["タイトル", "本文"])
+        data = ws.get_all_values()
+        if len(data) < 2: return []
+        return [{"title": row[0], "content": row[1]} for row in data[1:] if len(row) >= 2 and row[0]]
+    except Exception:
+        return []
+
+# 🌟 新機能：スプレッドシートにバズ投稿テンプレートを保存する
+def save_template(sheet_id, g_json, title, content):
+    if not sheet_id or not g_json: return False
+    try:
+        creds_dict = json.loads(g_json)
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        client = gspread.authorize(creds)
+        ss = client.open_by_key(sheet_id)
+        try:
+            ws = ss.worksheet("テンプレート")
+        except:
+            ws = ss.add_worksheet(title="テンプレート", rows="100", cols="2")
+            ws.append_row(["タイトル", "本文"])
+        ws.append_row([title, content])
+        return True
+    except Exception as e:
+        st.error(f"保存エラー: {e}")
+        return False
 
 def get_threads_engagement(token):
     if not token: return []
@@ -173,17 +212,17 @@ def create_affiliate_url(url, aff_id):
     encoded_url = urllib.parse.quote(url, safe='')
     return f"https://hb.afl.rakuten.co.jp/ichiba/{aff_id}/?pc={encoded_url}"
 
-def generate_post_text(item_name, price, target_str, tone, length, custom_prompt, api_key, image=None):
+def generate_post_text(item_name, price, target_str, tone, length, custom_prompt, reference_post, api_key, image=None):
     client = genai.Client(api_key=api_key)
     safe_item_name = item_name if item_name else "画像の商品"
     
-    # 🌟 ここがAIへの強力な命令（プロンプト）です！フックワードを追加しました。
     prompt = f"""楽天商品「{safe_item_name}」({price}円)を、ターゲット【{target_str}】に向けて、{tone}なテイストで約{length}文字で紹介してください。
 
 【絶対条件】
 ・挨拶や前置きは一切不要、本文のみを出力すること。
 ・「詳細はこちら」などのURL誘導文は絶対に書かないこと。
 ・AIが書いたような無難な表現は避け、友人が興奮してLINEしてきたような、人間味のあるリアルな言葉を使うこと。
+・添付された画像（スクリーンショット等）がある場合は、画像内のテキストや雰囲気も読み取り、商品の魅力として紹介文に必ず活かしてください。
 
 【冒頭のフック指定（超重要）】
 文章の最初の1行目は、必ず以下の「フックワード候補」の中から、商品のジャンルやトーンに最も適したものを1つ選び、自然な形で組み込んでスタートしてください。（※｛企業名等｝の部分は商品に合わせてAIが適切に変えてください）
@@ -199,6 +238,9 @@ def generate_post_text(item_name, price, target_str, tone, length, custom_prompt
 ・出産前に知りたかった...
 ・男の子のママ...聞こえますか...
 """
+
+    if reference_post:
+        prompt += f"\n\n【文体の完全模倣（超重要）】\n以下の参考投稿のテンポ、言葉選び、テンション、絵文字の使い方を完全にコピーして、今回の商品の紹介文を作成してください。\n＜参考投稿＞\n{reference_post}"
 
     if custom_prompt:
         prompt += f"\n\n【特別追加指示（必ず守ること）】\n{custom_prompt}"
@@ -230,7 +272,8 @@ if "api_keys" not in st.session_state:
         "gemini": "", "threads": "", "sheet_id": "", "g_json": ""
     }
 
-page = st.sidebar.radio("メニュー", ["1. ダッシュボード", "2. 商品作成＆予約", "3. エンゲージメント分析", "4. API設定"])
+# 🌟 新メニュー追加！
+page = st.sidebar.radio("メニュー", ["1. ダッシュボード", "2. 商品作成＆予約", "3. エンゲージメント分析", "4. API設定", "5. テンプレート管理"])
 
 # ==========================================
 # 📊 1. ダッシュボード
@@ -376,11 +419,14 @@ elif page == "2. 商品作成＆予約":
     if not api["rakuten_id"]: 
         st.warning("API設定を先に済ませてください。")
     else:
-        # 🌟 トーンリストを共通部分に移動しました！
         tone_list = [
             "エモい", "役立つ", "元気", "親近感 (友だち風)", "本音レビュー風", 
             "専門家 (プロ目線)", "ユーモア (面白く)", "あざと可愛い", "高級感 (エレガント)", "ズボラ・時短命"
         ]
+        
+        # 🌟 保存済みのテンプレートを取得
+        templates = get_templates(api["sheet_id"], api["g_json"])
+        template_options = ["手動で入力する"] + [t["title"] for t in templates]
 
         tab1, tab2 = st.tabs(["🏆 ランキングから探す", "🔗 商品URLから作る"])
 
@@ -390,6 +436,7 @@ elif page == "2. 商品作成＆予約":
         with tab1:
             st.write("人気のランキングから商品を一括で探して作成します。")
             with st.container(border=True):
+                # 全34ジャンル完全キープ！
                 genres_dict = {
                     "🏆 総合ランキング": "0", "👗 レディースファッション": "100371", "👔 メンズファッション": "551177",
                     "👜 バッグ・小物・ブランド雑貨": "216129", "👟 靴": "558885", "⌚ 腕時計": "558929",
@@ -404,15 +451,15 @@ elif page == "2. 商品作成＆予約":
                     "📚 本・雑誌・コミック": "200376", "📀 CD・DVD": "101240", "🎮 TVゲーム": "101205",
                     "🔧 その他 (ID指定)": "custom"
                 }
-                sel_name = st.selectbox("ランキングを取得したいジャンルを選択", list(genres_dict.keys()), key="sel_genre_p2")
+                sel_name = st.selectbox("ランキングを取得したいジャンルを選択", list(genres_dict.keys()), key="sel_genre_p1")
                 
                 target_id = genres_dict[sel_name]
                 if target_id == "custom":
-                    target_id = st.text_input("楽天ジャンルIDを入力してください", key="custom_id_in")
+                    target_id = st.text_input("楽天ジャンルIDを入力してください", key="custom_id_in_p1")
 
-                if st.button("ランキング取得", key="get_rank_p2"):
+                if st.button("ランキング取得", key="get_rank_p1"):
                     st.session_state["items"] = get_rakuten_ranking(api["rakuten_id"], api["rakuten_key"], api["rakuten_aff_id"], target_id)
-                    if "gen_res_p2" in st.session_state: del st.session_state["gen_res_p2"]
+                    if "gen_res_p1" in st.session_state: del st.session_state["gen_res_p1"]
 
             if "items" in st.session_state:
                 selected = []
@@ -422,7 +469,7 @@ elif page == "2. 商品作成＆予約":
                         c1.image(item["mediumImageUrls"][0]["imageUrl"])
                         c2.write(f"**{item['itemName'][:50]}...**")
                         if c2.checkbox("選ぶ", key=f"sel_chk_{i}"):
-                            item["u_img"] = c2.file_uploader("オリジナル画像を使う", type=["jpg","png"], key=f"u_f_{i}")
+                            item["u_img"] = c2.file_uploader("📸 オリジナル画像や参考スクショをアップロード", type=["jpg","png"], key=f"u_f_{i}")
                             selected.append(item)
                 
                 if selected:
@@ -430,35 +477,47 @@ elif page == "2. 商品作成＆予約":
                     with st.container(border=True):
                         st.subheader("ターゲット・文章設定")
                         c1, c2, c3 = st.columns(3)
-                        with c1: gender = st.radio("性別", ["女性", "男性", "指定なし"], key="r_gen")
-                        with c2: age = st.multiselect("年代", ["10代", "20代", "30代", "40代", "50代〜"], default=["20代", "30代"], key="m_age")
-                        with c3: kids = st.radio("子供", ["なし", "未就学児", "小学生"], key="r_kids")
+                        with c1: gender = st.radio("性別", ["女性", "男性", "指定なし"], key="r_gen_p1")
+                        with c2: age = st.multiselect("年代", ["10代", "20代", "30代", "40代", "50代〜"], default=["20代", "30代"], key="m_age_p1")
+                        with c3: kids = st.radio("子供", ["なし", "未就学児", "小学生"], key="r_kids_p1")
                         
                         c4, c5 = st.columns(2)
-                        with c4: tone = st.selectbox("トーン", tone_list, key="s_tone")
-                        with c5: length = st.slider("文字数", 10, 500, 50, step=10, key="s_len")
+                        with c4: tone = st.selectbox("トーン", tone_list, key="s_tone_p1")
+                        with c5: length = st.slider("文字数", 10, 500, 50, step=10, key="s_len_p1")
                         
-                        custom_prompt = st.text_area("✍️ 自由な追加指示 (オプション)", placeholder="例: メリットを3つ箇条書きで！", key="c_prompt")
+                        # 🌟 テンプレート呼び出し機能
+                        sel_temp_p1 = st.selectbox("🧠 バズ投稿テンプレートを呼び出す", template_options, key="sel_temp_p1")
+                        if sel_temp_p1 == "手動で入力する":
+                            ref_post_p1 = st.text_area("🧠 参考にするバズ投稿（手動入力）", placeholder="あのバズっている投稿の文章をコピペしてください", key="ref_post_p1")
+                        else:
+                            selected_content = next((t["content"] for t in templates if t["title"] == sel_temp_p1), "")
+                            ref_post_p1 = st.text_area("🧠 呼び出し中のテンプレート（そのまま反映されます）", value=selected_content, key="ref_post_p1_auto")
+                            
+                        custom_prompt = st.text_area("✍️ 自由な追加指示 (オプション)", placeholder="例: メリットを3つ箇条書きで！", key="c_prompt_p1")
                         
-                        if st.button(f"✨ {len(selected)}件の文章を生成", key="gen_btn_p2"):
+                        if st.button(f"✨ {len(selected)}件の文章を生成", key="gen_btn_p1"):
                             t_str = f"{gender}, 年代:{','.join(age)}, 子供:{kids}"
                             res = []
                             pb = st.progress(0)
                             for j, s_item in enumerate(selected):
                                 img_obj = Image.open(s_item["u_img"]) if s_item["u_img"] else None
-                                txt = generate_post_text(s_item["itemName"], s_item["itemPrice"], t_str, tone, length, custom_prompt, api["gemini"], img_obj)
+                                txt = generate_post_text(s_item["itemName"], s_item["itemPrice"], t_str, tone, length, custom_prompt, ref_post_p1, api["gemini"], img_obj)
                                 res.append({"item": s_item, "text": txt})
                                 pb.progress((j+1)/len(selected))
-                            st.session_state["gen_res_p2"] = res
+                            st.session_state["gen_res_p1"] = res
 
-            if "gen_res_p2" in st.session_state:
-                for k, p in enumerate(st.session_state["gen_res_p2"]):
+            if "gen_res_p1" in st.session_state:
+                for k, p in enumerate(st.session_state["gen_res_p1"]):
                     item = p["item"]
                     target_url = item.get("affiliateUrl", item["itemUrl"])
                     
                     with st.expander(f"確認: {item['itemName'][:30]}", expanded=True):
-                        f_txt = st.text_area("本文", value=p["text"], key=f"final_txt_{k}", height=150)
-                        use_img = st.checkbox("商品画像(楽天)を含める", value=True, key=f"use_img_{k}")
+                        f_txt = st.text_area("メイン本文", value=p["text"], key=f"final_txt_{k}", height=150)
+                        
+                        st.markdown("**👇 リプライ（ツリー）で投稿する内容**")
+                        reply_txt = st.text_area("リプライ文章（アフィリエイトリンク等）", value=f"▼ 詳細はこちら\n{target_url}", key=f"reply_txt_{k}", height=100)
+                        
+                        use_img = st.checkbox("商品画像を含める", value=True, key=f"use_img_{k}")
                         
                         c_now, c_sch = st.columns(2)
                         if c_now.button("🚀 即時投稿", key=f"btn_now_{k}"):
@@ -466,14 +525,14 @@ elif page == "2. 商品作成＆予約":
                             mid = post_to_threads(api["threads"], f_txt, image_url=i_url)
                             if mid:
                                 time.sleep(5)
-                                post_to_threads(api["threads"], f"▼ 詳細はこちら\n{target_url}", reply_to_id=mid)
+                                post_to_threads(api["threads"], reply_txt, reply_to_id=mid)
                                 st.success("成功！")
                         
                         with c_sch:
                             d = st.date_input("予約日", key=f"d_in_{k}")
                             t = st.time_input("時間", key=f"t_in_{k}")
                             if st.button("🗓️ 予約リストに追加", key=f"reserve_final_btn_{k}"):
-                                row = ["", f_txt, d.strftime('%Y/%m/%d'), str(t.hour), str(t.minute), "pending", "", "", f"▼ 詳細はこちら\n{target_url}", item["mediumImageUrls"][0]["imageUrl"] if use_img else ""]
+                                row = ["", f_txt, d.strftime('%Y/%m/%d'), str(t.hour), str(t.minute), "pending", "", "", reply_txt, item["mediumImageUrls"][0]["imageUrl"] if use_img else ""]
                                 if save_to_sheets(api["sheet_id"], api["g_json"], row):
                                     st.balloons()
                                     st.success(f"✅ 保存しました！ ({d} {t})")
@@ -486,7 +545,7 @@ elif page == "2. 商品作成＆予約":
             with st.container(border=True):
                 input_url = st.text_input("🔗 楽天の商品URLを貼り付け", placeholder="https://item.rakuten.co.jp/...", key="input_url_tab2")
                 
-                if st.button("商品情報を取得", key="get_url_btn"):
+                if st.button("商品情報を取得", key="get_url_btn_t2"):
                     if input_url:
                         with st.spinner("商品ページから情報を取得しています..."):
                             info = get_item_info_from_url(input_url)
@@ -504,9 +563,10 @@ elif page == "2. 商品作成＆予約":
                 if item["imageUrl"]: c1.image(item["imageUrl"])
                 else: c1.info("Web画像なし（ご自身の写真をアップロードしてください）")
                 
-                edit_name = c2.text_input("商品名（AIに伝わりやすいように編集できます）", value=item["itemName"], key="edit_name")
-                edit_price = c2.text_input("価格（任意）", value=item["itemPrice"], key="edit_price")
-                u_img_tab2 = c2.file_uploader("オリジナルの写真を使う場合（必須ではありません）", type=["jpg","png"], key="u_img_tab2")
+                edit_name = c2.text_input("商品名（AIに伝わりやすいように編集できます）", value=item["itemName"], key="edit_name_t2")
+                edit_price = c2.text_input("価格（任意）", value=item["itemPrice"], key="edit_price_t2")
+                
+                u_img_tab2 = c2.file_uploader("📸 オリジナル画像や参考スクショをアップロード", type=["jpg","png"], key="u_img_tab2")
                 
                 st.divider()
                 st.subheader("ターゲット・文章設定")
@@ -520,6 +580,14 @@ elif page == "2. 商品作成＆予約":
                 with tc4: tone_t2 = st.selectbox("トーン", tone_list, key="s_tone_t2")
                 with tc5: len_t2 = st.slider("文字数", 10, 500, 50, step=10, key="s_len_t2")
                 
+                # 🌟 テンプレート呼び出し機能
+                sel_temp_t2 = st.selectbox("🧠 バズ投稿テンプレートを呼び出す", template_options, key="sel_temp_t2")
+                if sel_temp_t2 == "手動で入力する":
+                    ref_post_t2 = st.text_area("🧠 参考にするバズ投稿（手動入力）", placeholder="あのバズっている投稿の文章をコピペしてください", key="ref_post_t2")
+                else:
+                    selected_content_t2 = next((t["content"] for t in templates if t["title"] == sel_temp_t2), "")
+                    ref_post_t2 = st.text_area("🧠 呼び出し中のテンプレート（そのまま反映されます）", value=selected_content_t2, key="ref_post_t2_auto")
+                    
                 cp_t2 = st.text_area("✍️ 自由な追加指示 (オプション)", key="cp_t2")
                 
                 if st.button("✨ この商品の文章を生成", key="gen_btn_tab2"):
@@ -530,7 +598,7 @@ elif page == "2. 商品作成＆予約":
                         img_obj_pass = Image.open(u_img_tab2) if u_img_tab2 else None
                         
                         with st.spinner("AIが執筆中..."):
-                            txt = generate_post_text(edit_name, edit_price, t_str, tone_t2, len_t2, cp_t2, api["gemini"], img_obj_pass)
+                            txt = generate_post_text(edit_name, edit_price, t_str, tone_t2, len_t2, cp_t2, ref_post_t2, api["gemini"], img_obj_pass)
                             st.session_state["gen_res_tab2"] = {
                                 "text": txt,
                                 "itemName": edit_name,
@@ -543,8 +611,12 @@ elif page == "2. 商品作成＆予約":
                 st.divider()
                 st.subheader("✅ 生成結果")
                 
-                f_txt_t2 = st.text_area("本文", value=p["text"], key="final_txt_t2", height=150)
-                use_img_t2 = st.checkbox("商品画像(Webの画像)を含める", value=True, key="use_img_t2")
+                f_txt_t2 = st.text_area("メイン本文", value=p["text"], key="final_txt_t2", height=150)
+                
+                st.markdown("**👇 リプライ（ツリー）で投稿する内容**")
+                reply_txt_t2 = st.text_area("リプライ文章（アフィリエイトリンク等）", value=f"▼ 詳細はこちら\n{p['target_url']}", key="reply_txt_t2", height=100)
+                
+                use_img_t2 = st.checkbox("商品画像を含める", value=True, key="use_img_t2")
                 
                 c_now_t2, c_sch_t2 = st.columns(2)
                 if c_now_t2.button("🚀 即時投稿", key="btn_now_t2"):
@@ -552,17 +624,54 @@ elif page == "2. 商品作成＆予約":
                     mid = post_to_threads(api["threads"], f_txt_t2, image_url=i_url)
                     if mid:
                         time.sleep(5)
-                        post_to_threads(api["threads"], f"▼ 詳細はこちら\n{p['target_url']}", reply_to_id=mid)
+                        post_to_threads(api["threads"], reply_txt_t2, reply_to_id=mid)
                         st.success("成功！")
                 
                 with c_sch_t2:
                     d_t2 = st.date_input("予約日", key="d_in_t2")
                     t_t2 = st.time_input("時間", key="t_in_t2")
                     if st.button("🗓️ 予約リストに追加", key="reserve_final_btn_t2"):
-                        row = ["", f_txt_t2, d_t2.strftime('%Y/%m/%d'), str(t_t2.hour), str(t_t2.minute), "pending", "", "", f"▼ 詳細はこちら\n{p['target_url']}", p["imageUrl"] if use_img_t2 else ""]
+                        row = ["", f_txt_t2, d_t2.strftime('%Y/%m/%d'), str(t_t2.hour), str(t_t2.minute), "pending", "", "", reply_txt_t2, p["imageUrl"] if use_img_t2 else ""]
                         if save_to_sheets(api["sheet_id"], api["g_json"], row):
                             st.balloons()
                             st.success(f"✅ 保存しました！ ({d_t2} {t_t2})")
+
+# ==========================================
+# 📝 5. テンプレート管理
+# ==========================================
+elif page == "5. テンプレート管理":
+    st.title("📝 バズ投稿テンプレート管理")
+    api = st.session_state["api_keys"]
+    
+    if not api["sheet_id"] or not api["g_json"]:
+        st.warning("💡 API設定画面で Sheet ID と JSON を設定すると利用できます。")
+    else:
+        st.write("過去にバズった投稿の文体やテンポを「テンプレート」として保存しておけます。保存したテンプレートは「商品作成」画面でいつでも呼び出してAIに真似させることができます！")
+        
+        with st.container(border=True):
+            st.subheader("➕ 新しいテンプレートを登録")
+            new_title = st.text_input("テンプレート名（例：超便利グッズ紹介用、育児の愚痴風 など）")
+            new_content = st.text_area("バズ投稿の本文（ここに入れた文章のテンポをAIが真似します）", height=150)
+            
+            if st.button("💾 テンプレートを保存", key="save_temp_btn"):
+                if new_title and new_content:
+                    with st.spinner("スプレッドシートに保存しています..."):
+                        if save_template(api["sheet_id"], api["g_json"], new_title, new_content):
+                            st.success(f"「{new_title}」を保存しました！次回から呼び出せます。")
+                            time.sleep(2)
+                            st.rerun()
+                else:
+                    st.error("タイトルと本文の両方を入力してください。")
+                    
+        st.divider()
+        st.subheader("📚 登録済みのテンプレート一覧")
+        templates = get_templates(api["sheet_id"], api["g_json"])
+        if templates:
+            for i, t in enumerate(templates):
+                with st.expander(f"📌 {t['title']}"):
+                    st.write(t["content"])
+        else:
+            st.info("まだテンプレートが登録されていません。上のフォームから登録してみましょう！")
 
 # ==========================================
 # ⚙️ 4. API設定ページ
