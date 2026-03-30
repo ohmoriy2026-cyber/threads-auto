@@ -13,16 +13,18 @@ import re
 import urllib.parse
 
 # ==========================================
-# 🎨 デザイナー設計：モダンUI & メニュー非表示
+# 🎨 デザイナー設計：モダンUI & 不要メニュー非表示
 # ==========================================
 st.set_page_config(page_title="Threads Marketing Pro", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
+    /* ヘッダー、メニュー、フッターを非表示 */
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     footer {visibility: hidden;}
     .stAppDeployButton {display: none;}
+    
     .stApp { font-family: 'Helvetica Neue', Arial, sans-serif; }
     [data-testid="stVerticalBlockBorderWrapper"] { 
         border-radius: 12px; padding: 20px; margin-bottom: 15px; 
@@ -144,7 +146,6 @@ if page == "2. 商品作成＆予約":
         templates = get_templates(api["sheet_id"], api["g_json"])
         tab1, tab2, tab3 = st.tabs(["🏆 ランキング", "🔗 URLから", "📸 画像/スクショから"])
 
-        # 共通入力UI関数 (各タブでキーがぶつからないよう suffix をつける)
         def draw_settings(suffix):
             c1, c2 = st.columns(2)
             with c1: 
@@ -161,7 +162,6 @@ if page == "2. 商品作成＆予約":
             custom = st.text_area("✍️ 自由指示", key=f"custom_{suffix}")
             return f"{gender}, {','.join(age)}", tone, length, ref_post, custom
 
-        # 生成結果表示関数
         def show_result(res_key, default_url, default_img):
             if res_key in st.session_state:
                 p = st.session_state[res_key]
@@ -180,13 +180,13 @@ if page == "2. 商品作成＆予約":
                             st.success("成功！")
 
         with tab1:
-            if st.button("ランキング取得", key="btn_get_rank"):
+            if st.button("ランキング取得", key="btn_get_rank_tab1"):
                 st.session_state["items"] = get_rakuten_ranking(api["rakuten_id"], api["rakuten_key"], api["rakuten_aff_id"], "0")
             if "items" in st.session_state:
                 for i, item in enumerate(st.session_state["items"]):
                     c1, c2 = st.columns([1, 4])
                     c1.image(item["mediumImageUrls"][0]["imageUrl"])
-                    if c2.button(f"選ぶ: {item['itemName'][:30]}...", key=f"sel_{i}"):
+                    if c2.button(f"選ぶ: {item['itemName'][:30]}...", key=f"sel_{i}_rank"):
                         st.session_state["active_item"] = item
                 if "active_item" in st.session_state:
                     st.divider()
@@ -199,10 +199,11 @@ if page == "2. 商品作成＆予約":
 
         with tab2:
             url_in = st.text_input("楽天URL", key="url_in_tab2")
-            if st.button("商品取得", key="btn_get_url"):
+            if st.button("商品取得", key="btn_get_url_tab2"):
                 st.session_state["url_info"] = get_item_info_from_url(url_in)
             if "url_info" in st.session_state:
                 info = st.session_state["url_info"]
+                st.image(info["imageUrl"], width=150)
                 st.write(f"商品: {info['itemName']}")
                 t_str, tone, length, ref, custom = draw_settings("tab2")
                 if st.button("✨ 本文作成", key="gen_btn_tab2"):
@@ -214,7 +215,7 @@ if page == "2. 商品作成＆予約":
             u_img = st.file_uploader("スクショ/画像をアップ", type=["jpg","png"], key="img_up_tab3")
             hint = st.text_input("補足説明 (任意)", key="hint_tab3")
             t_str, tone, length, ref, custom = draw_settings("tab3")
-            if st.button("✨ 画像から本文作成", key="gen_btn_tab3_unique"):
+            if st.button("✨ 画像から本文作成", key="gen_btn_tab3_manual"):
                 if u_img:
                     txt = generate_post_text(hint, "", t_str, tone, length, custom, ref, api["gemini"], image=Image.open(u_img))
                     st.session_state["res3"] = {"text": txt}
@@ -222,15 +223,16 @@ if page == "2. 商品作成＆予約":
             show_result("res3", "【URLを貼り付け】", "")
 
 # ------------------------------------------
-# その他のページ
+# 📝 5. テンプレート管理
 # ------------------------------------------
 elif page == "5. テンプレート管理":
     st.title("📝 テンプレート管理")
     api = st.session_state["api_keys"]
-    if api["sheet_id"]:
-        with st.form("temp_form"):
-            t_title = st.text_input("タイトル")
-            t_content = st.text_area("本文")
+    if not api["sheet_id"]: st.warning("API設定を先に済ませてください。")
+    else:
+        with st.form("temp_form_unique"):
+            t_title = st.text_input("テンプレート名")
+            t_content = st.text_area("バズ投稿本文")
             if st.form_submit_button("保存"):
                 if save_template(api["sheet_id"], api["g_json"], t_title, t_content):
                     st.success("保存完了！"); time.sleep(1); st.rerun()
@@ -238,8 +240,27 @@ elif page == "5. テンプレート管理":
         for t in get_templates(api["sheet_id"], api["g_json"]):
             with st.expander(t["title"]): st.write(t["content"])
 
+# ------------------------------------------
+# ⚙️ 4. API設定（管理者モード復活）
+# ------------------------------------------
 elif page == "4. API設定":
     st.title("⚙️ API設定")
+    # 管理者モード（合言葉入力欄）を復活
+    with st.expander("👤 管理者モード (ロード)", expanded=True):
+        admin_pw = st.text_input("合言葉", type="password", key="admin_pw_field")
+        if st.button("Secretsから読み込む", key="load_secrets_btn"):
+            if admin_pw == st.secrets.get("master_password"):
+                # 各入力欄のキー（api_riなど）に対応するSecretsの値をセット
+                st.session_state["api_ri"] = st.secrets.get("rakuten_id", "")
+                st.session_state["api_rk"] = st.secrets.get("rakuten_key", "")
+                st.session_state["api_ra"] = st.secrets.get("rakuten_aff_id", "")
+                st.session_state["api_gk"] = st.secrets.get("gemini_key", "")
+                st.session_state["api_tt"] = st.secrets.get("threads_token", "")
+                st.session_state["api_si"] = st.secrets.get("sheet_id", "")
+                st.session_state["api_gj"] = st.secrets.get("g_json", "")
+                st.success("✅ ロード成功！下の保存ボタンを押してください。")
+            else: st.error("❌ 合言葉が違います")
+
     with st.container(border=True):
         c1, c2 = st.columns(2)
         r_id = c1.text_input("楽天ID", key="api_ri", type="password")
@@ -249,9 +270,13 @@ elif page == "4. API設定":
         t_tok = c2.text_input("Threads Token", key="api_tt", type="password")
         s_id = c2.text_input("Sheet ID", key="api_si")
         g_js = st.text_area("JSON", key="api_gj", height=100)
-        if st.button("保存"):
-            st.session_state["api_keys"].update({"rakuten_id":r_id, "rakuten_key":r_key, "rakuten_aff_id":r_aff, "gemini":g_key, "threads":t_tok, "sheet_id":s_id, "g_json":g_js})
-            st.success("保存しました！")
+        
+        if st.button("設定を保存", key="save_api_btn_final"):
+            st.session_state["api_keys"].update({
+                "rakuten_id": r_id, "rakuten_key": r_key, "rakuten_aff_id": r_aff,
+                "gemini": g_key, "threads": t_tok, "sheet_id": s_id, "g_json": g_js
+            })
+            st.success("設定を保存しました！")
 
-elif page == "1. ダッシュボード": st.title("📊 ダッシュボード"); st.info("準備中")
-elif page == "3. 分析": st.title("🔍 分析"); st.info("準備中")
+elif page == "1. ダッシュボード": st.title("📊 ダッシュボード"); st.info("スプレッドシートから本日の予定を読み込みます。")
+elif page == "3. 分析": st.title("🔍 分析"); st.info("Threadsの反応を取得します。")
