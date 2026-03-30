@@ -11,9 +11,10 @@ import json
 import pandas as pd
 import concurrent.futures
 import re
+import urllib.parse
 
 # ==========================================
-# 🎨 デザイナー設計：モダンUI
+# 🎨 デザイナー設計：テーマ対応のモダンUI
 # ==========================================
 st.set_page_config(page_title="Threads Marketing Pro", layout="wide", initial_sidebar_state="expanded")
 
@@ -62,6 +63,15 @@ def download_image(url):
         res = requests.get(target_url, timeout=10)
         return Image.open(io.BytesIO(res.content))
     except: return None
+
+# 💡 アフィリエイトリンク自動生成関数
+def create_affiliate_link(url, aff_id):
+    if not url: return "【URL未設定】"
+    if not aff_id: return url # IDがない場合は元のURLを返す
+    if "hb.afl.rakuten.co.jp" in url: return url # 既にアフィリンクならそのまま
+    # URLエンコードして指定の形式に組み込む
+    encoded_url = urllib.parse.quote(url, safe='')
+    return f"https://hb.afl.rakuten.co.jp/hgc/{aff_id}/?pc={encoded_url}"
 
 def save_to_sheets(sheet_id, g_json, row_data):
     if not sheet_id or not g_json: return False
@@ -125,9 +135,9 @@ def get_rakuten_ranking(app_id, access_key, affiliate_id, genre_id):
     try: return [item["Item"] for item in requests.get("https://openapi.rakuten.co.jp/ichibaranking/api/IchibaItem/Ranking/20220601", params=params).json().get("Items", [])[:10]]
     except: return []
 
-# 💡【修正箇所】Clientを一度変数に入れてから通信し、クローズエラーを防ぐ
+# 💡【503エラー対策】サーバー高負荷時に自動で3回までリトライする処理を追加
 def generate_post_text(item_name, price, target_str, tone, length, custom_prompt, reference_post, api_key, image=None):
-    if not api_key: return "❌ APIキー未設定"
+    if not api_key: return "❌ APIキーが未設定です"
     
     price_str = f"({price}円)" if price else ""
     prompt = f"楽天商品「{item_name}」{price_str}をターゲット【{target_str}】へ{tone}なテイストで約{length}文字で紹介して。\n"
@@ -135,14 +145,19 @@ def generate_post_text(item_name, price, target_str, tone, length, custom_prompt
     if reference_post: prompt += f"【参考にするバズ投稿の型】\n{reference_post}\n"
     if custom_prompt: prompt += f"特別指示:{custom_prompt}"
     
-    try:
-        # クライアントを保持して通信する（RuntimeError回避）
-        client = genai.Client(api_key=api_key)
-        contents = [prompt, image] if image else prompt
-        response = client.models.generate_content(model='gemini-2.5-flash', contents=contents)
-        return response.text
-    except Exception as e:
-        return f"❌ AIエラー: {e}"
+    # 503エラーが出た場合、最大3回までやり直す
+    for attempt in range(3):
+        try:
+            client = genai.Client(api_key=api_key)
+            contents = [prompt, image] if image else prompt
+            response = client.models.generate_content(model='gemini-2.5-flash', contents=contents)
+            return response.text
+        except Exception as e:
+            err_msg = str(e)
+            if "503" in err_msg and attempt < 2:
+                time.sleep(3) # サーバーが混んでいるので3秒待ってリトライ
+                continue
+            return f"❌ AIエラー発生: {err_msg}"
 
 def post_to_threads(access_token, text, reply_to_id=None, image_url=None):
     params = {"access_token": access_token, "text": text, "media_type": "IMAGE" if image_url else "TEXT"}
@@ -210,7 +225,6 @@ if page == "1. ダッシュボード":
             df['like_count'] = pd.to_numeric(df['like_count'], errors='coerce').fillna(0).astype(int)
             df['reply_count'] = pd.to_numeric(df['reply_count'], errors='coerce').fillna(0).astype(int)
             df['views'] = pd.to_numeric(df['views'], errors='coerce').fillna(0).astype(int)
-            # 💡 日付を m/d 形式に
             df['date_key'] = pd.to_datetime(df['timestamp']).dt.strftime('%m/%d')
             
             df_main = df[df['is_reply'] != True]
@@ -228,7 +242,7 @@ if page == "1. ダッシュボード":
                 st.metric("❤️ 累計いいね数", f"{total_likes:,} 回")
                 st.bar_chart(df_main.groupby('date_key')['like_count'].sum(), use_container_width=True, color="#FF4B4B")
             with c3: 
-                st.metric("💬 累計リプライ獲得数", f"{total_replies:,} 件")
+                st.metric("💬 累計リプライ", f"{total_replies:,} 件")
                 st.bar_chart(df_main.groupby('date_key')['reply_count'].sum(), use_container_width=True, color="#FFB800")
 
 # ==========================================
@@ -246,9 +260,9 @@ elif page == "2. 商品作成＆予約":
 
         def draw_ui(k):
             c1, c2, c3 = st.columns(3)
-            with c1: gender = st.radio("性別", ["女性", "男性", "指定なし"], key=f"r_gen_{k}")
+            with c1: gen = st.radio("性別", ["女性", "男性", "指定なし"], key=f"r_gen_{k}")
             with c2: age = st.multiselect("年代", ["10代", "20代", "30代", "40代", "50代〜"], default=["20代", "30代"], key=f"m_age_{k}")
-            with c3: kids = st.radio("子供", ["なし", "未就学児", "小学生"], key=f"r_kids_{k}")
+            with c3: kids = st.radio("子供", ["なし", "あり"], key=f"r_kids_{k}")
             
             c4, c5 = st.columns(2)
             tone_list = ["エモい", "役立つ", "元気", "親近感", "本音レビュー風", "専門家", "ユーモア", "あざと可愛い", "高級感", "ズボラ命"]
@@ -259,11 +273,10 @@ elif page == "2. 商品作成＆予約":
             sel_tmp = st.selectbox("🧠 テンプレート適用", tmp_opt, key=f"tmp_{k}")
             ref = next((t["content"] for t in templates if t["title"] == sel_tmp), "") if sel_tmp != "手動入力" else ""
             custom_prompt = st.text_area("✍️ 自由な追加指示 (オプション)", key=f"c_prompt_{k}")
-            return f"{gender}, 年代:{','.join(age)}, 子供:{kids}", tone, length, ref, custom_prompt
+            return f"{gen}, 年代:{','.join(age)}, 子供:{kids}", tone, length, ref, custom_prompt
 
         def show_final_ui(key, default_txt, default_url, default_img_url):
             with st.expander("✨ 生成結果の確認・編集", expanded=True):
-                # 💡 チェックBOX ➡ URL入力 ➡ デフォルト画像 の優先順位
                 use_img = st.checkbox("🖼️ 投稿に画像を含める", value=True, key=f"use_img_{key}")
                 drive_url = st.text_input("🔗 投稿用画像URL (Googleドライブ等: 空欄なら初期画像を引用)", value=default_img_url if default_img_url else "", key=f"drive_{key}")
                 
@@ -295,7 +308,6 @@ elif page == "2. 商品作成＆予約":
                             st.success(f"✅ 保存しました！")
 
         with tab1:
-            # 💡 31ジャンル完全網羅
             genres_dict = {
                 "🏆 総合ランキング": "0", "👗 レディースファッション": "100371", "👔 メンズファッション": "551177",
                 "👜 バッグ・小物": "216129", "👟 靴": "558885", "⌚ 腕時計": "558929",
@@ -341,7 +353,9 @@ elif page == "2. 商品作成＆予約":
             if "res_list_t1" in st.session_state:
                 for k, p in enumerate(st.session_state["res_list_t1"]):
                     item = p["item"]
-                    show_final_ui(f"r1_{item['itemCode']}", p["text"], item.get("affiliateUrl", item["itemUrl"]), item["mediumImageUrls"][0]["imageUrl"])
+                    # 💡 自動アフィリエイトリンク生成
+                    aff_url = create_affiliate_link(item.get("itemUrl", ""), str(api["rakuten_aff_id"]).strip())
+                    show_final_ui(f"r1_{item['itemCode']}", p["text"], aff_url, item["mediumImageUrls"][0]["imageUrl"])
 
         with tab2:
             url_in = st.text_input("楽天商品URLを貼り付け", key="url_in_t2")
@@ -360,10 +374,11 @@ elif page == "2. 商品作成＆予約":
                     st.session_state["res_t2"] = {"text": txt}
             
             if "res_t2" in st.session_state:
-                show_final_ui("res_t2_final", st.session_state["res_t2"]["text"], st.session_state["item_t2"]["url"], st.session_state["item_t2"]["img"])
+                # 💡 自動アフィリエイトリンク生成
+                aff_url_t2 = create_affiliate_link(st.session_state["item_t2"]["url"], str(api["rakuten_aff_id"]).strip())
+                show_final_ui("res_t2_final", st.session_state["res_t2"]["text"], aff_url_t2, st.session_state["item_t2"]["img"])
 
         with tab3:
-            # 💡 フロー修正：URL入力 ➡ 生成 ➡ 追加添付＆投稿
             st.info("💡 画像URLを読み込ませて本文を作成し、投稿します。")
             img_url_t3 = st.text_input("🔗 画像URLを入力 (Googleドライブ等)", key="url_tab3")
             hint_t3 = st.text_input("商品名のヒント (任意)", key="hint_tab3")
@@ -378,9 +393,13 @@ elif page == "2. 商品作成＆予約":
                     st.error("画像URLかヒントを入力してください。")
             
             if "res_t3" in st.session_state:
-                # show_final_ui のデフォルト画像として、入力したURLをそのまま渡す
-                aff_url = st.text_input("🔗 アフィリエイトURL (リプライ用)", key="aff_url_t3")
-                show_final_ui("res_t3_final", st.session_state["res_t3"]["text"], aff_url if aff_url else "【URL未設定】", st.session_state["res_t3"]["url"])
+                # 生成後に追加添付の画像・URL入力を受け付ける
+                uf_t3 = st.file_uploader("📸 【追加】投稿用スクショ添付 (無ければ上記URLを使用)", type=["jpg","png"], key="uf_t3")
+                aff_t3 = st.text_input("🔗 アフィリエイト商品URL (リプライ用)", key="aff_url_t3")
+                # 💡 自動アフィリエイトリンク生成
+                final_reply_url = create_affiliate_link(aff_t3, str(api["rakuten_aff_id"]).strip()) if aff_t3 else "【URL未設定】"
+                
+                show_final_ui("res_t3_final", st.session_state["res_t3"]["text"], final_reply_url, st.session_state["res_t3"]["url"])
 
 # ==========================================
 # 🔍 3. エンゲージメント分析
