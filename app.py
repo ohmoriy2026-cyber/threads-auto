@@ -13,7 +13,7 @@ import concurrent.futures
 import re
 
 # ==========================================
-# 🎨 デザイナー設計：テーマ対応のモダンUI
+# 🎨 デザイン設定：全デバイス対応
 # ==========================================
 st.set_page_config(page_title="Threads Marketing Pro", layout="wide", initial_sidebar_state="expanded")
 
@@ -37,7 +37,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# ⚙️ 共通関数群
+# ⚙️ 共通ロジック関数
 # ==========================================
 
 def convert_drive_link(url):
@@ -72,7 +72,6 @@ def get_sheet_data(sheet_id, g_json):
         creds = Credentials.from_service_account_info(creds_dict, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
         client = gspread.authorize(creds)
         data = client.open_by_key(sheet_id).sheet1.get_all_values()
-        if len(data) < 2: return []
         return [dict(zip(data[0], row)) for row in data[1:] if any(row)]
     except: return []
 
@@ -159,16 +158,16 @@ if "api_keys" not in st.session_state:
     st.session_state["api_keys"] = {"rakuten_id":"","rakuten_key":"","rakuten_aff_id":"","gemini":"","threads":"","sheet_id":"","g_json":""}
 
 page = st.sidebar.radio("メニュー", ["1. ダッシュボード", "2. 商品作成＆予約", "3. 分析", "4. API設定", "5. テンプレート管理"])
-tone_list = ["エモい", "役立つ", "元気", "親近感", "本音レビュー風", "あざと可愛い", "高級感"]
+tone_list = ["エモい", "役立つ", "元気", "親近感", "本音レビュー風", "あざと可愛い", "高級感", "ユーモア"]
 
 # ------------------------------------------
-# 📊 1. ダッシュボード (m/d形式)
+# 📊 1. ダッシュボード (日付 m/d形式)
 # ------------------------------------------
 if page == "1. ダッシュボード":
     st.title("📊 ダッシュボード")
     api = st.session_state["api_keys"]
     if api["threads"]:
-        with st.spinner("集計中..."):
+        with st.spinner("データを取得中..."):
             raw = get_threads_engagement(api["threads"])
             if raw:
                 df = pd.DataFrame(raw)
@@ -199,7 +198,7 @@ elif page == "2. 商品作成＆予約":
             c1, c2, c3 = st.columns(3)
             with c1: gen = st.radio("性別", ["女性", "男性", "指定なし"], key=f"g_{k}")
             with c2: age = st.multiselect("年代", ["10代", "20代", "30代", "40代", "50代〜"], default=["20代", "30代"], key=f"a_{k}")
-            with c3: kids = st.radio("子供", ["なし", "未就学児", "小学生"], key=f"k_{k}")
+            with c3: kids = st.radio("子供", ["なし", "あり"], key=f"k_{k}")
             c4, c5 = st.columns(2)
             with c4: tone = st.selectbox("トーン", tone_list, key=f"t_{k}")
             with c5: length = st.slider("文字数", 30, 400, 80, key=f"l_{k}")
@@ -214,7 +213,7 @@ elif page == "2. 商品作成＆予約":
                 p = st.session_state[key]
                 with st.expander("✨ 投稿確認・編集", expanded=True):
                     use_i = st.checkbox("🖼️ 投稿に画像を含める", value=True, key=f"ui_f_{key}")
-                    dr_url = st.text_input("🔗 投稿用画像URL (空ならデフォルト引用)", value=d_img if d_img else "", key=f"dr_f_{key}")
+                    dr_url = st.text_input("🔗 投稿用画像URL (Googleドライブ等: 空ならデフォルト引用)", value=d_img if d_img else "", key=f"dr_f_{key}")
                     mk, rk = f"m_f_{key}", f"r_f_{key}"
                     if mk not in st.session_state: st.session_state[mk] = p["text"]
                     if rk not in st.session_state: st.session_state[rk] = f"▼ 詳細はこちら\n{d_url}"
@@ -231,20 +230,24 @@ elif page == "2. 商品作成＆予約":
                             if save_to_sheets(api["sheet_id"], api["g_json"], row): st.success("完了")
 
         with tab1:
+            # 💡 31ジャンル完全復活
             genres = {
                 "🏆 総合": "0", "👗 レディース服": "100371", "👔 メンズ服": "551177", "👠 靴": "558885", 
-                "👜 バッグ・小物": "216129", "💄 美容・コスメ": "100939", "💊 ダイエット": "100143", 
-                "🍎 食品": "100227", "🍪 スイーツ": "551167", "🍹 飲料": "100316", "🔌 家電": "562631", 
-                "📸 カメラ": "211742", "💻 PC": "100026", "⚽ スポーツ": "101070", "⛳ ゴルフ": "101077", 
-                "🚗 車・バイク": "503190", "🧸 おもちゃ": "101164", "🎨 ホビー": "101165", 
-                "🎮 ゲーム": "101205", "🐱 ペット": "101213", "🍼 ベビー": "100533", "📚 本": "200376", "📀 CD・DVD": "101240"
+                "👜 バッグ・小物": "216129", "⌚ 腕時計": "558929", "💎 ジュエリー": "200162", 
+                "💄 美容・コスメ": "100939", "💊 健康・サプリ": "100143", "🏥 医薬品・介護": "551169", 
+                "🍎 食品": "100227", "🍪 スイーツ": "551167", "🍹 飲料": "100316", "🍺 ビール": "510915", 
+                "🍶 日本酒": "510901", "🛋 インテリア": "100804", "🍳 キッチン": "558944", 
+                "🛁 日用品": "215783", "🔌 家電": "562631", "📸 カメラ": "211742", "💻 PC": "100026", 
+                "⚽ スポーツ": "101070", "⛳ ゴルフ": "101077", "🚗 車・バイク": "503190", 
+                "🧸 おもちゃ": "101164", "🎨 ホビー": "101165", "🎸 楽器": "112493", "🎮 ゲーム": "101205", 
+                "🐱 ペット": "101213", "🍼 ベビー": "100533", "📚 本": "200376", "📀 CD・DVD": "101240"
             }
-            sel_g = st.selectbox("ジャンル選択", list(genres.keys()), key="rank_v16")
+            sel_g = st.selectbox("ジャンル選択", list(genres.keys()), key="rank_v17")
             if st.button("ランキング取得"):
-                st.session_state["it_v16"] = get_rakuten_ranking(api["rakuten_id"], api["rakuten_key"], api["rakuten_aff_id"], genres[sel_g])
-            if "it_v16" in st.session_state:
+                st.session_state["it_v17"] = get_rakuten_ranking(api["rakuten_id"], api["rakuten_key"], api["rakuten_aff_id"], genres[sel_g])
+            if "it_v17" in st.session_state:
                 sel = []
-                for i, it in enumerate(st.session_state["it_v16"]):
+                for i, it in enumerate(st.session_state["it_v17"]):
                     with st.container(border=True):
                         c1, c2 = st.columns([1, 4])
                         c1.image(it["mediumImageUrls"][0]["imageUrl"])
@@ -274,21 +277,17 @@ elif page == "2. 商品作成＆予約":
                 show_final("res2_f", u["url"], u["img"])
 
         with tab3:
-            # --- 💡 要望通りのフロー ---
+            # --- 💡 要望フロー： URL ➡ 作成 ➡ 追加添付 ---
             img_url_t3 = st.text_input("🔗 画像URLを貼る (Googleドライブ等)", key="url_tab3")
             hint_t3 = st.text_input("商品名やヒント", key="hint_tab3")
             t_str, tone, length, ref, cp = draw_ui("tab3")
-            
             if st.button("✨ 本文を作成"):
                 ana_img = download_image(img_url_t3)
                 txt = generate_post_text(hint_t3, "", t_str, tone, length, cp, ref, api["gemini"], image=ana_img)
                 st.session_state["res3_f"] = {"text": txt}
-            
             if "res3_f" in st.session_state:
-                # 生成後に追加添付・アフィURL入力欄を表示
                 uf_t3 = st.file_uploader("📸 【追加】投稿用スクショ添付 (無ければ上記URLを使用)", type=["jpg","png"], key="uf_t3")
-                aff_t3 = st.text_input("🔗 アフィリエイトURL (リプライ用)", key="aff_t3")
-                # 投稿画像の最終決定
+                aff_t3 = st.text_input("🔗 アフィリエイトURL (リプライ用)", key="aff_tab3")
                 show_final("res3_f", aff_t3, img_url_t3)
 
 # 🔍 分析 (文法エラー解消済み)
@@ -309,7 +308,7 @@ elif page == "3. 分析":
                 c4.metric("今週の返信", f"{this_df['replies'].sum():,}")
                 st.divider(); st.dataframe(df.sort_values('views', ascending=False), use_container_width=True)
 
-# ⚙️ API設定 (管理者ロード正常化)
+# ⚙️ API設定 (管理者ロード)
 elif page == "4. API設定":
     st.title("⚙️ API設定")
     with st.expander("👤 管理者ロード", expanded=True):
