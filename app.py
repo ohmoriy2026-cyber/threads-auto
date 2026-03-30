@@ -14,7 +14,7 @@ import re
 import urllib.parse
 
 # ==========================================
-# 🎨 デザイナー設計：テーマ対応のモダンUI
+# 🎨 デザイナー設計：モダンUI
 # ==========================================
 st.set_page_config(page_title="Threads Marketing Pro", layout="wide", initial_sidebar_state="expanded")
 
@@ -64,12 +64,10 @@ def download_image(url):
         return Image.open(io.BytesIO(res.content))
     except: return None
 
-# 💡 アフィリエイトリンク自動生成関数
 def create_affiliate_link(url, aff_id):
     if not url: return "【URL未設定】"
-    if not aff_id: return url # IDがない場合は元のURLを返す
-    if "hb.afl.rakuten.co.jp" in url: return url # 既にアフィリンクならそのまま
-    # URLエンコードして指定の形式に組み込む
+    if not aff_id: return url
+    if "hb.afl.rakuten.co.jp" in url: return url
     encoded_url = urllib.parse.quote(url, safe='')
     return f"https://hb.afl.rakuten.co.jp/hgc/{aff_id}/?pc={encoded_url}"
 
@@ -80,7 +78,7 @@ def save_to_sheets(sheet_id, g_json, row_data):
         gspread.authorize(creds).open_by_key(sheet_id).sheet1.append_row(row_data)
         return True
     except Exception as e:
-        st.error(f"エラー: {e}")
+        st.error(f"スプレッドシート書き込みエラー: {e}")
         return False
 
 def get_sheet_data(sheet_id, g_json):
@@ -101,18 +99,23 @@ def get_templates(sheet_id, g_json):
         return [{"title": row[0], "content": row[1]} for row in data[1:] if len(row) >= 2 and row[0]]
     except: return []
 
+# 💡 バグ修正箇所：rows=100, cols=2 を正しく数値として渡すよう修正しました
 def save_template(sheet_id, g_json, title, content):
     if not sheet_id or not g_json: return False
     try:
         creds = Credentials.from_service_account_info(json.loads(g_json), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
         ss = gspread.authorize(creds).open_by_key(sheet_id)
-        try: ws = ss.worksheet("テンプレート")
+        try: 
+            ws = ss.worksheet("テンプレート")
         except: 
-            ws = ss.add_worksheet(title="テンプレート", rows="100", cols="2")
+            # ここが文字列だとエラーになり裏で止まっていました
+            ws = ss.add_worksheet(title="テンプレート", rows=100, cols=2)
             ws.append_row(["タイトル", "本文"])
         ws.append_row([title, content])
         return True
-    except: return False
+    except Exception as e:
+        st.error(f"テンプレート保存エラー: {e}")
+        return False
 
 def get_threads_engagement(token):
     if not token: return []
@@ -135,7 +138,6 @@ def get_rakuten_ranking(app_id, access_key, affiliate_id, genre_id):
     try: return [item["Item"] for item in requests.get("https://openapi.rakuten.co.jp/ichibaranking/api/IchibaItem/Ranking/20220601", params=params).json().get("Items", [])[:10]]
     except: return []
 
-# 💡【503エラー対策】サーバー高負荷時に自動で3回までリトライする処理を追加
 def generate_post_text(item_name, price, target_str, tone, length, custom_prompt, reference_post, api_key, image=None):
     if not api_key: return "❌ APIキーが未設定です"
     
@@ -145,7 +147,6 @@ def generate_post_text(item_name, price, target_str, tone, length, custom_prompt
     if reference_post: prompt += f"【参考にするバズ投稿の型】\n{reference_post}\n"
     if custom_prompt: prompt += f"特別指示:{custom_prompt}"
     
-    # 503エラーが出た場合、最大3回までやり直す
     for attempt in range(3):
         try:
             client = genai.Client(api_key=api_key)
@@ -155,9 +156,10 @@ def generate_post_text(item_name, price, target_str, tone, length, custom_prompt
         except Exception as e:
             err_msg = str(e)
             if "503" in err_msg and attempt < 2:
-                time.sleep(3) # サーバーが混んでいるので3秒待ってリトライ
+                time.sleep(3)
                 continue
             return f"❌ AIエラー発生: {err_msg}"
+    return "❌ サーバーエラー"
 
 def post_to_threads(access_token, text, reply_to_id=None, image_url=None):
     params = {"access_token": access_token, "text": text, "media_type": "IMAGE" if image_url else "TEXT"}
@@ -210,7 +212,6 @@ if page == "1. ダッシュボード":
                 st.success("本日の待機中の投稿はありません。")
 
         st.divider()
-
         st.subheader("📈 アカウント総合状況 (直近100件)")
         threads_data = get_threads_engagement(api["threads"])
         
@@ -353,7 +354,6 @@ elif page == "2. 商品作成＆予約":
             if "res_list_t1" in st.session_state:
                 for k, p in enumerate(st.session_state["res_list_t1"]):
                     item = p["item"]
-                    # 💡 自動アフィリエイトリンク生成
                     aff_url = create_affiliate_link(item.get("itemUrl", ""), str(api["rakuten_aff_id"]).strip())
                     show_final_ui(f"r1_{item['itemCode']}", p["text"], aff_url, item["mediumImageUrls"][0]["imageUrl"])
 
@@ -374,7 +374,6 @@ elif page == "2. 商品作成＆予約":
                     st.session_state["res_t2"] = {"text": txt}
             
             if "res_t2" in st.session_state:
-                # 💡 自動アフィリエイトリンク生成
                 aff_url_t2 = create_affiliate_link(st.session_state["item_t2"]["url"], str(api["rakuten_aff_id"]).strip())
                 show_final_ui("res_t2_final", st.session_state["res_t2"]["text"], aff_url_t2, st.session_state["item_t2"]["img"])
 
@@ -393,12 +392,9 @@ elif page == "2. 商品作成＆予約":
                     st.error("画像URLかヒントを入力してください。")
             
             if "res_t3" in st.session_state:
-                # 生成後に追加添付の画像・URL入力を受け付ける
                 uf_t3 = st.file_uploader("📸 【追加】投稿用スクショ添付 (無ければ上記URLを使用)", type=["jpg","png"], key="uf_t3")
                 aff_t3 = st.text_input("🔗 アフィリエイト商品URL (リプライ用)", key="aff_url_t3")
-                # 💡 自動アフィリエイトリンク生成
                 final_reply_url = create_affiliate_link(aff_t3, str(api["rakuten_aff_id"]).strip()) if aff_t3 else "【URL未設定】"
-                
                 show_final_ui("res_t3_final", st.session_state["res_t3"]["text"], final_reply_url, st.session_state["res_t3"]["url"])
 
 # ==========================================
@@ -440,7 +436,6 @@ elif page == "3. エンゲージメント分析":
             with c3: st.metric("💬 累計コメント数", f"{total_replies:,}")
 
             st.divider()
-
             st.subheader("📑 過去の投稿一覧 (全データ)")
             display_df = df[['timestamp', 'text', 'views', 'like_count', 'reply_count']].copy()
             display_df.columns = ['投稿日', '投稿内容', '👀 閲覧数', '❤️ いいね', '💬 コメント']
@@ -494,7 +489,7 @@ elif page == "5. テンプレート管理":
     api = st.session_state["api_keys"]
     
     if not api["sheet_id"]:
-        st.warning("API設定画面でロードを完了させてください。")
+        st.warning("⚠️ API設定画面で設定をロードまたは保存してから開いてください。")
     else:
         with st.form("template_form"):
             st.subheader("➕ 新規テンプレート登録")
@@ -502,13 +497,22 @@ elif page == "5. テンプレート管理":
             t_content = st.text_area("バズ投稿の本文 (これを手本にします)", height=150)
             
             if st.form_submit_button("保存する"):
-                if save_template(api["sheet_id"], api["g_json"], t_title, t_content):
-                    st.success("テンプレートを保存しました！")
-                    time.sleep(1)
-                    st.rerun()
+                if not t_title or not t_content:
+                    st.error("❌ タイトルと本文を入力してください。")
+                else:
+                    if save_template(api["sheet_id"], api["g_json"], t_title, t_content):
+                        st.success("✅ テンプレートを保存しました！")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("❌ 保存に失敗しました。")
 
         st.divider()
         st.subheader("📚 登録済みのテンプレート")
-        for t in get_templates(api["sheet_id"], api["g_json"]):
-            with st.expander(t["title"]):
-                st.write(t["content"])
+        templates = get_templates(api["sheet_id"], api["g_json"])
+        if templates:
+            for t in templates:
+                with st.expander(t["title"]):
+                    st.write(t["content"])
+        else:
+            st.info("登録されているテンプレートはありません。")
