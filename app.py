@@ -244,7 +244,7 @@ elif page == "2. 商品作成＆予約":
         def show_final_ui(key, def_txt, def_url, def_img):
             with st.expander(f"✨ 投稿確認: {key[:10]}...", expanded=True):
                 ui = st.checkbox("🖼️ 画像あり", value=True, key=f"ui_{key}")
-                dr = st.text_input("🔗 ドライブ画像URL", value=def_img if def_img else "", key=f"dr_{key}")
+                dr = st.text_input("🔗 ドライブの画像URLを入力", value=def_img if def_img else "", key=f"dr_{key}")
                 m_k, r_k = f"mt_{key}", f"rt_{key}"
                 if m_k not in st.session_state: st.session_state[m_k] = def_txt
                 if r_k not in st.session_state: st.session_state[r_k] = f"▼ 詳細はこちら\n{def_url}"
