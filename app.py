@@ -30,11 +30,15 @@ st.set_page_config(page_title="Threads Marketing Pro", layout="wide", initial_si
 
 st.markdown("""
 <style>
-    /* 👇 右上のGitHubリンクやメニュー「だけ」をピンポイントで非表示にする */
-    [data-testid="stHeaderActionElements"] {display: none !important;}
-    [data-testid="stToolbar"] {display: none !important;}
-    .stAppDeployButton {display: none !important;}
-    #MainMenu {visibility: hidden !important;}
+    /* 👇 右上の「Fork」「GitHubアイコン」「3点リーダー」だけをピンポイントで消す */
+    [data-testid="stToolbar"] { display: none !important; }
+    .stAppDeployButton { display: none !important; }
+    #MainMenu { visibility: hidden !important; }
+
+    /* 👇 左側のメニュー（サイドバーや開閉ボタン）を絶対に強制表示させる安全策 */
+    header { visibility: visible !important; background: transparent !important; }
+    [data-testid="collapsedControl"] { display: flex !important; visibility: visible !important; }
+    [data-testid="stSidebar"] { display: block !important; visibility: visible !important; }
 
     /* 👇 以下の既存デザインはそのまま維持 */
     .stApp { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; }
