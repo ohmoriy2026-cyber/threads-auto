@@ -15,7 +15,7 @@ import urllib.parse
 from streamlit_local_storage import LocalStorage
 
 # ==========================================
-# 🎨 UIデザイン設定
+# 🎨 デザイナー設計：モダンUI ＆ ヘッダー調整
 # ==========================================
 st.set_page_config(page_title="Threads Marketing Pro", layout="wide", initial_sidebar_state="expanded")
 
@@ -104,6 +104,15 @@ def save_template(sheet_id, g_json, title, content):
         return True
     except: return False
 
+# 💡 アカウント名（ユーザー名）を取得する関数を追加
+def get_threads_user_name(token):
+    if not token: return None
+    url = f"https://graph.threads.net/v1.0/me?fields=username&access_token={token}"
+    try:
+        res = requests.get(url).json()
+        return res.get("username")
+    except: return None
+
 def get_threads_engagement(token):
     if not token: return []
     try:
@@ -160,19 +169,27 @@ def post_to_threads(access_token, text, reply_to_id=None, image_url=None):
 if "api_keys" not in st.session_state:
     st.session_state["api_keys"] = {"rakuten_id": "", "rakuten_key": "", "rakuten_aff_id": "", "gemini": "", "threads": "", "sheet_id": "", "g_json": ""}
 
-stored = local_storage.getItem("threads_marketing_keys")
-if stored and not st.session_state["api_keys"]["rakuten_id"]:
-    st.session_state["api_keys"].update({
-        "rakuten_id": stored.get("rakuten_id", ""), "rakuten_key": stored.get("rakuten_key", ""), "rakuten_aff_id": stored.get("rakuten_aff_id", ""),
-        "gemini": stored.get("gemini_key", ""), "threads": stored.get("threads_token", ""), "sheet_id": stored.get("sheet_id", ""), "g_json": stored.get("g_json", "")
-    })
+# ブラウザ保存からの自動復旧
+if not st.session_state["api_keys"]["rakuten_id"]:
+    stored = local_storage.getItem("threads_marketing_keys")
+    if stored:
+        st.session_state["api_keys"].update({
+            "rakuten_id": stored.get("rakuten_id", ""), "rakuten_key": stored.get("rakuten_key", ""), "rakuten_aff_id": stored.get("rakuten_aff_id", ""),
+            "gemini": stored.get("gemini_key", ""), "threads": stored.get("threads_token", ""), "sheet_id": stored.get("sheet_id", ""), "g_json": stored.get("g_json", "")
+        })
 
 page = st.sidebar.radio("メニュー", ["1. ダッシュボード", "2. 商品作成＆予約", "3. エンゲージメント分析", "4. API設定", "5. テンプレート管理"])
 api = st.session_state["api_keys"]
 
 # --- 1. ダッシュボード ---
 if page == "1. ダッシュボード":
-    st.title("📊 ダッシュボード")
+    # 💡 ユーザー名を取得してタイトルに反映
+    user_name = get_threads_user_name(api["threads"])
+    if user_name:
+        st.title(f"📊 {user_name} のダッシュボード")
+    else:
+        st.title("📊 ダッシュボード")
+        
     if not api["rakuten_id"] or not api["threads"]: st.warning("⚠️ API設定を行ってください。")
     else:
         sheet_data = get_sheet_data(api["sheet_id"], api["g_json"])
@@ -291,9 +308,9 @@ elif page == "3. エンゲージメント分析":
 # --- 4. API設定 ---
 elif page == "4. API設定":
     st.title("⚙️ API設定")
-    with st.expander("👤 管理者モード", expanded=True):
+    with st.expander("👤 管理者モード (Secretsロード)", expanded=True):
         pw = st.text_input("合言葉", type="password", key="m_pw_in")
-        if st.button("一括ロード", key="b_secrets_load"):
+        if st.button("一括ロードしてシステムに反映", key="b_secrets_load"):
             if pw == st.secrets.get("master_password"):
                 st.session_state["api_keys"].update({"rakuten_id":st.secrets.get("rakuten_id",""),"rakuten_key":st.secrets.get("rakuten_key",""),"rakuten_aff_id":st.secrets.get("rakuten_aff_id",""),"gemini":st.secrets.get("gemini_key",""),"threads":st.secrets.get("threads_token",""),"sheet_id":st.secrets.get("sheet_id",""),"g_json":st.secrets.get("g_json","")})
                 st.success("✅ ロードしました！"); st.rerun()
@@ -307,7 +324,7 @@ elif page == "4. API設定":
         t_tok = c2.text_input("Threads Token", value=api["threads"], type="password", key="t_tok_set")
         s_id = c2.text_input("Sheet ID", value=api["sheet_id"], key="s_id_set")
         g_js = st.text_area("GCloud JSON", value=api["g_json"], height=100, key="g_js_set")
-        if st.button("✅ 設定を保存", key="b_save_set"):
+        if st.button("✅ 設定をブラウザに記憶して保存", key="b_save_set"):
             d = {"rakuten_id":r_id,"rakuten_key":r_key,"rakuten_aff_id":r_aff,"gemini":g_key,"threads":t_tok,"sheet_id":s_id,"g_json":g_js}
             st.session_state["api_keys"].update(d); local_storage.setItem("threads_marketing_keys", d); st.success("🎉 保存完了！"); st.rerun()
 
