@@ -36,6 +36,7 @@ st.markdown("""
         background-color: #007AFF !important; color: #FFFFFF !important; font-weight: bold; 
         border-radius: 8px; width: 100%; border: none; padding: 0.5rem 1rem;
     }
+    .stButton>button:hover { background-color: #0056b3 !important; }
     [data-testid="stMetricValue"] { font-size: 2rem !important; font-weight: 800 !important; color: #007AFF !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -62,31 +63,32 @@ def download_image(url):
         return Image.open(io.BytesIO(res.content))
     except: return None
 
-# 💡 Threads用にリンクを短縮する関数
+# 💡 URL短縮関数（エンコードを強化し、確実性を向上）
 def shorten_url(url):
     if not url or "http" not in url: return url
     try:
-        # TinyURL APIを使用して無料で短縮
-        res = requests.get(f"http://tinyurl.com/api-create?url={url}", timeout=5)
-        if res.status_code == 200:
+        # アフィリエイトURL内の記号を安全に送るためにエンコード
+        safe_url = urllib.parse.quote(url)
+        res = requests.get(f"http://tinyurl.com/api-create?url={safe_url}", timeout=10)
+        if res.status_code == 200 and "http" in res.text:
             return res.text
     except:
         pass
     return url
 
-# 💡 アフィリエイトリンク自動生成 ＆ Threads用短縮
+# 💡 アフィリエイトリンク生成 ＆ 自動短縮
 def create_affiliate_link(url, aff_id):
     if not url: return "【URL未設定】"
     if not aff_id: return url
     
-    # 基本のアフィリエイトリンク作成
+    # 基本のアフィリエイトURL作成
     if "hb.afl.rakuten.co.jp" not in url:
-        encoded_url = urllib.parse.quote(url, safe='')
-        base_aff_url = f"https://hb.afl.rakuten.co.jp/hgc/{aff_id}/?pc={encoded_url}"
+        encoded_pc_url = urllib.parse.quote(url, safe='')
+        base_aff_url = f"https://hb.afl.rakuten.co.jp/hgc/{aff_id}/?pc={encoded_pc_url}"
     else:
         base_aff_url = url
     
-    # 💡 Threads用に短縮URLに変換
+    # 💡 仕上げに短縮
     return shorten_url(base_aff_url)
 
 def save_to_sheets(sheet_id, g_json, row_data):
@@ -157,7 +159,7 @@ def generate_post_text(item_name, price, target_str, tone, length, custom_prompt
     if not api_key: return "❌ APIキーが未設定です"
     price_str = f"({price}円)" if price else ""
     prompt = f"""あなたは、SNSでリアルな本音を発信するインフルエンサーです。商品「{item_name}」{price_str}を、ターゲット【{target_str}】に向けて、{tone}なテイストで約{length}文字で紹介してください。
-【絶対厳守】1. 宣伝感を消し、実体験の本音として書く。2. 禁止語：ご存知ですか、結論から、ですよね、いかがでしたか。3. 魅力を1点に絞り、読者が画像をタップしたくなる『余白』を残す。"""
+【絶対厳守】1. 宣伝感を消し、実体験の本音として書く。2. 禁止語：ご存知ですか、結論から、ですよね、いかがでしたか。3. 魅力を1点に絞り、読者が画像をタップしたくなる『余白』を残す。4. 文末に（文字）等本文と関係のない文言は入れない。"""
     if reference_post: prompt += f"\n【文体手本】\n{reference_post}\n"
     if custom_prompt: prompt += f"\n【特別指示】\n{custom_prompt}"
     
@@ -239,15 +241,15 @@ elif page == "2. 商品作成＆予約":
             cp = st.text_area("✍️ 特別指示", key=f"cp_{k}")
             return f"{gen}, {','.join(age)}, 子供:{kids}", tone, length, ref, cp
 
-        def show_final_ui(key, default_txt, default_url, default_img):
+        def show_final_ui(key, def_txt, def_url, def_img):
             with st.expander(f"✨ 投稿確認: {key[:10]}...", expanded=True):
                 ui = st.checkbox("🖼️ 画像あり", value=True, key=f"ui_{key}")
-                dr = st.text_input("🔗 ドライブ画像URL", value=default_img if default_img else "", key=f"dr_{key}")
+                dr = st.text_input("🔗 ドライブ画像URL", value=def_img if def_img else "", key=f"dr_{key}")
                 m_k, r_k = f"mt_{key}", f"rt_{key}"
-                if m_k not in st.session_state: st.session_state[m_k] = default_txt
-                if r_k not in st.session_state: st.session_state[r_k] = f"▼ 詳細はこちら\n{default_url}"
+                if m_k not in st.session_state: st.session_state[m_k] = def_txt
+                if r_k not in st.session_state: st.session_state[r_k] = f"▼ 詳細はこちら\n{def_url}"
                 st.text_area("本文", key=m_k, height=150); st.text_area("リプライ", key=r_k, height=80)
-                f_img = convert_drive_link(dr) if ui and dr else (default_img if ui else None)
+                f_img = convert_drive_link(dr) if ui and dr else (def_img if ui else None)
                 c1, c2 = st.columns(2)
                 if c1.button("🚀 今すぐ投稿", key=f"now_{key}"):
                     mid = post_to_threads(api["threads"], st.session_state[m_k], image_url=f_img)
@@ -312,6 +314,7 @@ elif page == "2. 商品作成＆予約":
                         st.session_state["res3"] = {"text": generate_post_text(hint_t3, "", t_str, tone, length, cp, ref, api["gemini"], download_image(img_url_t3)), "url": img_url_t3}
                 else: st.error("画像URLを入力してください。")
             if "res3" in st.session_state:
+                uf_t3 = st.file_uploader("📸 【追加】スクショ", type=["jpg","png"], key="uf_tab3")
                 aff_t3 = st.text_input("🔗 アフィ商品URL", key="aff_tab3")
                 final_aff = create_affiliate_link(aff_t3, api["rakuten_aff_id"]) if aff_t3 else "【URL未設定】"
                 show_final_ui("res3_f", st.session_state["res3"]["text"], final_aff, st.session_state["res3"]["url"])
