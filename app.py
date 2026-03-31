@@ -214,9 +214,9 @@ elif page == "2. 商品作成＆予約":
             unique_key = f"{key}_{st.session_state['gen_count']}"
             with st.expander(f"✨ 投稿確認", expanded=True):
                 ui = st.checkbox("🖼️ 画像あり", value=True, key=f"ui_{unique_key}")
-                dr = st.text_input("🔗 画像URL", value=def_img if def_img else "", key=f"dr_{unique_key}")
+                dr = st.text_input("🔗 Googleドライブの画像URL", value=def_img if def_img else "", key=f"dr_{unique_key}")
                 m_txt = st.text_area("本文", value=def_txt, height=150, key=f"mt_{unique_key}")
-                r_txt = st.text_area("リプライ", value=f"▼ 詳細はこちら\n{def_url}", height=80, key=f"rt_{unique_key}")
+                r_txt = st.text_area("リプライ　予約投稿の場合はアフィリエイトリンクを直接SSに記載してください", value=f"▼ 詳細はこちら\n{def_url}", height=80, key=f"rt_{unique_key}")
                 f_img = convert_drive_link(dr) if ui and dr else (def_img if ui else None)
                 c1, c2 = st.columns(2)
                 if c1.button("🚀 今すぐ投稿", key=f"now_{unique_key}"):
