@@ -158,11 +158,26 @@ def generate_post_text(item_name, price, target_str, tone, length, custom_prompt
     if not api_key: return "❌ APIキーが未設定です"
     
     price_str = f"({price}円)" if price else ""
-    prompt = f"楽天商品「{item_name}」{price_str}をターゲット【{target_str}】へ{tone}なテイストで約{length}文字で紹介して。\n"
-    prompt += "条件:挨拶不要、URL誘導文禁止、人間味のあるリアルな言葉、好奇心を煽るフック必須。\n"
-    if reference_post: prompt += f"【参考にするバズ投稿の型】\n{reference_post}\n"
-    if custom_prompt: prompt += f"特別指示:{custom_prompt}"
     
+    # 👇 ここからプロンプトを「劇的改善版」に変更
+    prompt = f"""あなたは、SNSでリアルな本音を発信するインフルエンサーです。
+以下の楽天商品「{item_name}」{price_str}を、ターゲット【{target_str}】に向けて、{tone}なテイストで約{length}文字でつぶやいてください。
+
+【絶対厳守のルール】
+1. 宣伝・紹介っぽさを完全に消し、自分が実際に使って感動した「リアルな本音・独り言」として書くこと。
+2. 以下の「AI特有の不自然な表現」は絶対に使用禁止。
+   （禁止ワード：〜をご存知ですか、結論から言うと、〜ですよね、ぜひチェックして、いかがでしたか、快適な生活を）
+3. カタログスペックを並べるのではなく、「これのおかげで生活がどう変わるか（情景・感情）」を1点だけ強烈にアピールすること。
+4. 全部を説明しきらず、読者が思わず「え、なにそれ？」「詳しく見たい！」と画像をタップしたくなる『余白（フック）』を残すこと。
+5. 文末の句点は適度に省き、SNSらしい自然な改行や「ガチで」「やばい」などの口語表現を許可します。
+"""
+    
+    if reference_post: 
+        prompt += f"\n【参考にするバズ投稿の型（この文体を真似てください）】\n{reference_post}\n"
+    if custom_prompt: 
+        prompt += f"\n【特別指示】\n{custom_prompt}"
+    
+    # 👇 ここから下の「503エラー自動リトライ機能」はそのまま維持
     for attempt in range(3):
         try:
             client = genai.Client(api_key=api_key)
