@@ -1,14 +1,4 @@
 import streamlit as st
-# ヘッダー、メニュー、フッターをすべて非表示にする設定
-
-hide_st_style = """
-            <style>
-            #MainMenu {visibility: hidden;}
-            header {visibility: hidden;}
-            footer {visibility: hidden;}
-            .stAppDeployButton {display: none;}
-            </style>
-            """
 import requests
 from google import genai
 import time
@@ -30,6 +20,17 @@ st.set_page_config(page_title="Threads Marketing Pro", layout="wide", initial_si
 
 st.markdown("""
 <style>
+    /* 👇 右上の「GitHubアイコン」「Deploy」「メニュー」だけをピンポイントで確実に消す */
+    [data-testid="stHeaderActionElements"] { display: none !important; }
+    [data-testid="stToolbar"] { display: none !important; }
+    .stAppDeployButton { display: none !important; }
+    #MainMenu { visibility: hidden !important; }
+    footer { visibility: hidden !important; }
+    
+    /* 👇 左側のサイドバーを開く「＞」ボタンは残すためにヘッダー自体は表示 */
+    header { visibility: visible !important; background: transparent !important; }
+
+    /* 👇 既存のデザイン設定 */
     .stApp { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; }
     [data-testid="stVerticalBlockBorderWrapper"] { 
         border-radius: 12px; padding: 20px; margin-bottom: 15px; 
@@ -74,28 +75,29 @@ def download_image(url):
         return Image.open(io.BytesIO(res.content))
     except: return None
 
+# 💡 アフィリエイトリンク自動生成関数
 def create_affiliate_link(url, aff_id):
     if not url: return "【URL未設定】"
-    if not aff_id: return url
-    if "hb.afl.rakuten.co.jp" in url: return url
+    if not aff_id: return url # IDがない場合は元のURLを返す
+    if "hb.afl.rakuten.co.jp" in url: return url # 既にアフィリンクならそのまま
+    # URLエンコードして指定の形式に組み込む
     encoded_url = urllib.parse.quote(url, safe='')
     return f"https://hb.afl.rakuten.co.jp/hgc/{aff_id}/?pc={encoded_url}"
 
-# 💡【修正】strict=False を追加してJSONの改行エラーを回避
 def save_to_sheets(sheet_id, g_json, row_data):
     if not sheet_id or not g_json: return False
     try:
-        creds = Credentials.from_service_account_info(json.loads(g_json, strict=False), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
+        creds = Credentials.from_service_account_info(json.loads(g_json), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
         gspread.authorize(creds).open_by_key(sheet_id).sheet1.append_row(row_data)
         return True
     except Exception as e:
-        st.error(f"スプレッドシート書き込みエラー: {e}")
+        st.error(f"エラー: {e}")
         return False
 
 def get_sheet_data(sheet_id, g_json):
     if not sheet_id or not g_json: return []
     try:
-        creds = Credentials.from_service_account_info(json.loads(g_json, strict=False), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
+        creds = Credentials.from_service_account_info(json.loads(g_json), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
         data = gspread.authorize(creds).open_by_key(sheet_id).sheet1.get_all_values()
         if len(data) < 2: return []
         return [dict(zip(data[0], row)) for row in data[1:] if any(row)]
@@ -104,7 +106,7 @@ def get_sheet_data(sheet_id, g_json):
 def get_templates(sheet_id, g_json):
     if not sheet_id or not g_json: return []
     try:
-        creds = Credentials.from_service_account_info(json.loads(g_json, strict=False), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
+        creds = Credentials.from_service_account_info(json.loads(g_json), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
         ws = gspread.authorize(creds).open_by_key(sheet_id).worksheet("テンプレート")
         data = ws.get_all_values()
         return [{"title": row[0], "content": row[1]} for row in data[1:] if len(row) >= 2 and row[0]]
@@ -113,18 +115,15 @@ def get_templates(sheet_id, g_json):
 def save_template(sheet_id, g_json, title, content):
     if not sheet_id or not g_json: return False
     try:
-        creds = Credentials.from_service_account_info(json.loads(g_json, strict=False), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
+        creds = Credentials.from_service_account_info(json.loads(g_json), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
         ss = gspread.authorize(creds).open_by_key(sheet_id)
-        try: 
-            ws = ss.worksheet("テンプレート")
+        try: ws = ss.worksheet("テンプレート")
         except: 
             ws = ss.add_worksheet(title="テンプレート", rows=100, cols=2)
             ws.append_row(["タイトル", "本文"])
         ws.append_row([title, content])
         return True
-    except Exception as e:
-        st.error(f"テンプレート保存エラー: {e}")
-        return False
+    except: return False
 
 def get_threads_engagement(token):
     if not token: return []
@@ -147,30 +146,17 @@ def get_rakuten_ranking(app_id, access_key, affiliate_id, genre_id):
     try: return [item["Item"] for item in requests.get("https://openapi.rakuten.co.jp/ichibaranking/api/IchibaItem/Ranking/20220601", params=params).json().get("Items", [])[:10]]
     except: return []
 
+# 💡【503エラー対策】サーバー高負荷時に自動で3回までリトライする処理
 def generate_post_text(item_name, price, target_str, tone, length, custom_prompt, reference_post, api_key, image=None):
     if not api_key: return "❌ APIキーが未設定です"
     
     price_str = f"({price}円)" if price else ""
+    prompt = f"楽天商品「{item_name}」{price_str}をターゲット【{target_str}】へ{tone}なテイストで約{length}文字で紹介して。\n"
+    prompt += "条件:挨拶不要、URL誘導文禁止、人間味のあるリアルな言葉、好奇心を煽るフック必須。\n"
+    if reference_post: prompt += f"【参考にするバズ投稿の型】\n{reference_post}\n"
+    if custom_prompt: prompt += f"特別指示:{custom_prompt}"
     
-    # 👇 ここからプロンプトを「劇的改善版」に変更
-    prompt = f"""あなたは、SNSでリアルな本音を発信するインフルエンサーです。
-以下の楽天商品「{item_name}」{price_str}を、ターゲット【{target_str}】に向けて、{tone}なテイストで約{length}文字でつぶやいてください。
-
-【絶対厳守のルール】
-1. 宣伝・紹介っぽさを完全に消し、自分が実際に使って感動した「リアルな本音・独り言」として書くこと。
-2. 以下の「AI特有の不自然な表現」は絶対に使用禁止。
-   （禁止ワード：〜をご存知ですか、結論から言うと、〜ですよね、ぜひチェックして、いかがでしたか、快適な生活を）
-3. カタログスペックを並べるのではなく、「これのおかげで生活がどう変わるか（情景・感情）」を1点だけ強烈にアピールすること。
-4. 全部を説明しきらず、読者が思わず「え、なにそれ？」「詳しく見たい！」と画像をタップしたくなる『余白（フック）』を残すこと。
-5. 文末の句点は適度に省き、SNSらしい自然な改行や「ガチで」「やばい」などの口語表現を許可します。
-"""
-    
-    if reference_post: 
-        prompt += f"\n【参考にするバズ投稿の型（この文体を真似てください）】\n{reference_post}\n"
-    if custom_prompt: 
-        prompt += f"\n【特別指示】\n{custom_prompt}"
-    
-    # 👇 ここから下の「503エラー自動リトライ機能」はそのまま維持
+    # 503エラーが出た場合、最大3回までやり直す
     for attempt in range(3):
         try:
             client = genai.Client(api_key=api_key)
@@ -180,10 +166,9 @@ def generate_post_text(item_name, price, target_str, tone, length, custom_prompt
         except Exception as e:
             err_msg = str(e)
             if "503" in err_msg and attempt < 2:
-                time.sleep(3)
+                time.sleep(3) # サーバーが混んでいるので3秒待ってリトライ
                 continue
             return f"❌ AIエラー発生: {err_msg}"
-    return "❌ サーバーエラー"
 
 def post_to_threads(access_token, text, reply_to_id=None, image_url=None):
     params = {"access_token": access_token, "text": text, "media_type": "IMAGE" if image_url else "TEXT"}
@@ -236,6 +221,7 @@ if page == "1. ダッシュボード":
                 st.success("本日の待機中の投稿はありません。")
 
         st.divider()
+
         st.subheader("📈 アカウント総合状況 (直近100件)")
         threads_data = get_threads_engagement(api["threads"])
         
