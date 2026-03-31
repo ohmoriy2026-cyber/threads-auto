@@ -5,3 +5,4 @@ gspread
 google-auth
 pandas
 Pillow
+streamlit-local-storage
