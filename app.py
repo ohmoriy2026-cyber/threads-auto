@@ -30,12 +30,11 @@ st.set_page_config(page_title="Threads Marketing Pro", layout="wide", initial_si
 
 st.markdown("""
 <style>
-    /* 👇 右上のGitHubリンクやメニューを完全に非表示にするコード */
-    header {visibility: hidden !important;}
-    #MainMenu {visibility: hidden !important;}
-    [data-testid="stHeader"] {display: none !important;}
+    /* 👇 右上のGitHubリンクやメニュー「だけ」をピンポイントで非表示にする */
+    [data-testid="stHeaderActionElements"] {display: none !important;}
     [data-testid="stToolbar"] {display: none !important;}
     .stAppDeployButton {display: none !important;}
+    #MainMenu {visibility: hidden !important;}
 
     /* 👇 以下の既存デザインはそのまま維持 */
     .stApp { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; }
