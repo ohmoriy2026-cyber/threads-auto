@@ -1,4 +1,14 @@
 import streamlit as st
+# ヘッダー、メニュー、フッターをすべて非表示にする設定
+
+hide_st_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            header {visibility: hidden;}
+            footer {visibility: hidden;}
+            .stAppDeployButton {display: none;}
+            </style>
+            """
 import requests
 from google import genai
 import time
