@@ -273,7 +273,7 @@ elif page == "2. 商品作成＆予約":
             c1, c2, c3 = st.columns(3)
             with c1: gen = st.radio("性別", ["女性", "男性", "指定なし"], key=f"r_gen_{k}")
             with c2: age = st.multiselect("年代", ["10代", "20代", "30代", "40代", "50代〜"], default=["20代", "30代"], key=f"m_age_{k}")
-            with c3: kids = st.radio("子供", ["なし", "乳児”,"未就学児","小学生"], key=f"r_kids_{k}")
+            with c3: kids = st.radio("子供", ["なし", "あり"], key=f"r_kids_{k}")
             
             c4, c5 = st.columns(2)
             tone_list = ["エモい", "役立つ", "元気", "親近感", "本音レビュー風", "専門家", "ユーモア", "あざと可愛い", "高級感", "ズボラ命"]
