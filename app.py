@@ -63,33 +63,41 @@ def download_image(url):
         return Image.open(io.BytesIO(res.content))
     except: return None
 
-# 💡 URL短縮関数（エンコードを強化し、確実性を向上）
+# 💡 Threads用短縮URL関数（精度を最大まで向上）
 def shorten_url(url):
     if not url or "http" not in url: return url
-    try:
-        # アフィリエイトURL内の記号を安全に送るためにエンコード
-        safe_url = urllib.parse.quote(url)
-        res = requests.get(f"http://tinyurl.com/api-create?url={safe_url}", timeout=10)
-        if res.status_code == 200 and "http" in res.text:
-            return res.text
-    except:
-        pass
-    return url
+    if "tinyurl.com" in url: return url
+    
+    # 楽天の長いURLを短縮サービスに送るための前処理
+    # 2回エンコードされないよう、一度デコードしてから再度クリーンにエンコード
+    clean_url = urllib.parse.unquote(url)
+    safe_target = urllib.parse.quote(clean_url)
+    
+    for _ in range(2): # 失敗に備えて2回リトライ
+        try:
+            res = requests.get(f"http://tinyurl.com/api-create?url={safe_target}", timeout=15)
+            if res.status_code == 200 and "http" in res.text:
+                return res.text.strip()
+        except:
+            time.sleep(1)
+            continue
+    return url # 全て失敗した時だけ元の長いURLを返す
 
 # 💡 アフィリエイトリンク生成 ＆ 自動短縮
 def create_affiliate_link(url, aff_id):
     if not url: return "【URL未設定】"
     if not aff_id: return url
     
-    # 基本のアフィリエイトURL作成
+    # 1. 楽天アフィリエイトの長いリンクを作成
     if "hb.afl.rakuten.co.jp" not in url:
-        encoded_pc_url = urllib.parse.quote(url, safe='')
-        base_aff_url = f"https://hb.afl.rakuten.co.jp/hgc/{aff_id}/?pc={encoded_pc_url}"
+        # PC用URLパラメータとしてエンコード
+        pc_param = urllib.parse.quote(url, safe='')
+        long_url = f"https://hb.afl.rakuten.co.jp/hgc/{aff_id}/?pc={pc_param}"
     else:
-        base_aff_url = url
+        long_url = url
     
-    # 💡 仕上げに短縮
-    return shorten_url(base_aff_url)
+    # 2. 仕上げにThreads用に短縮
+    return shorten_url(long_url)
 
 def save_to_sheets(sheet_id, g_json, row_data):
     if not sheet_id or not g_json: return False
@@ -142,7 +150,7 @@ def get_threads_engagement(token):
             try:
                 data = requests.get(f"https://graph.threads.net/v1.0/{th['id']}/insights?metric=views,likes,replies&access_token={token}").json().get("data", [])
                 m = {d.get('name'): (d.get('values', [{}])[0].get('value', 0)) for d in data}
-                th.update({'views': m.get('views',0), 'like_count': m.get('likes',0), 'reply_count': m.get('replies',0)})
+                th.update({'views': m.get('views', 0), 'like_count': m.get('likes', 0), 'reply_count': m.get('replies', 0)})
             except: th.update({'views':0, 'like_count':0, 'reply_count':0})
             return th
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor: return list(executor.map(fetch_insights, threads))
@@ -278,7 +286,7 @@ elif page == "2. 商品作成＆予約":
                 if sel:
                     st.divider(); t_str, tone, length, ref, cp = draw_ui("t1")
                     if st.button(f"✨ {len(sel)}件を一括生成", key="gen_tab1"):
-                        with st.spinner("AIが文章を作成中です..."):
+                        with st.spinner("AI文章作成中 ＆ URL短縮中..."):
                             res_list = []
                             for s in sel:
                                 img_input = Image.open(s["u_img_file"]) if s.get("u_img_file") else download_image(s["mediumImageUrls"][0]["imageUrl"])
@@ -299,7 +307,7 @@ elif page == "2. 商品作成＆予約":
             if "it2" in st.session_state:
                 it = st.session_state["it2"]; st.image(it["img"], width=150); t_str, tone, length, ref, cp = draw_ui("t2")
                 if st.button("✨ 本文作成", key="gen_tab2"):
-                    with st.spinner("作成中..."):
+                    with st.spinner("作成 ＆ 短縮中..."):
                         st.session_state["res2"] = {"text": generate_post_text(it["name"], "", t_str, tone, length, cp, ref, api["gemini"], download_image(it["img"]))}
             if "res2" in st.session_state: 
                 aff_url_t2 = create_affiliate_link(st.session_state["it2"]["url"], api["rakuten_aff_id"])
@@ -310,7 +318,7 @@ elif page == "2. 商品作成＆予約":
             hint_t3 = st.text_input("商品名ヒント", key="h_tab3"); t_str, tone, length, ref, cp = draw_ui("t3")
             if st.button("✨ 本文を作成", key="gen_tab3"):
                 if img_url_t3:
-                    with st.spinner("解析中..."):
+                    with st.spinner("解析 ＆ 短縮中..."):
                         st.session_state["res3"] = {"text": generate_post_text(hint_t3, "", t_str, tone, length, cp, ref, api["gemini"], download_image(img_url_t3)), "url": img_url_t3}
                 else: st.error("画像URLを入力してください。")
             if "res3" in st.session_state:
