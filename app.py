@@ -37,7 +37,6 @@ st.markdown("""
         border-radius: 8px; width: 100%; border: none; padding: 0.5rem 1rem;
     }
     .stButton>button:hover { background-color: #0056b3 !important; }
-    [data-testid="stMetricValue"] { font-size: 2rem !important; font-weight: 800 !important; color: #007AFF !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -63,41 +62,38 @@ def download_image(url):
         return Image.open(io.BytesIO(res.content))
     except: return None
 
-# 💡 Threads用短縮URL関数（精度を最大まで向上）
-def shorten_url(url):
-    if not url or "http" not in url: return url
-    if "tinyurl.com" in url: return url
+# 💡 Threads用短縮URL関数（楽天専用の特殊エンコード版）
+def shorten_url(long_url):
+    if not long_url or "http" not in long_url: return long_url
+    if "tinyurl.com" in long_url: return long_url
     
-    # 楽天の長いURLを短縮サービスに送るための前処理
-    # 2回エンコードされないよう、一度デコードしてから再度クリーンにエンコード
-    clean_url = urllib.parse.unquote(url)
-    safe_target = urllib.parse.quote(clean_url)
-    
-    for _ in range(2): # 失敗に備えて2回リトライ
-        try:
-            res = requests.get(f"http://tinyurl.com/api-create?url={safe_target}", timeout=15)
-            if res.status_code == 200 and "http" in res.text:
-                return res.text.strip()
-        except:
-            time.sleep(1)
-            continue
-    return url # 全て失敗した時だけ元の長いURLを返す
+    try:
+        # 楽天リンクは記号が多いため、まずは完全に一塊の文字列としてエンコード
+        # safe='' を指定することで、すべての記号をAPIが壊れない形式に変換します
+        encoded_url = urllib.parse.quote(long_url, safe='')
+        api_url = f"http://tinyurl.com/api-create?url={encoded_url}"
+        
+        res = requests.get(api_url, timeout=15)
+        if res.status_code == 200 and "tinyurl.com" in res.text:
+            return res.text.strip()
+    except Exception as e:
+        pass
+    return long_url
 
-# 💡 アフィリエイトリンク生成 ＆ 自動短縮
-def create_affiliate_link(url, aff_id):
-    if not url: return "【URL未設定】"
-    if not aff_id: return url
+# 💡 アフィリエイトリンク生成 ＆ 短縮呼び出し
+def create_affiliate_link(item_url, aff_id):
+    if not item_url: return "【URL未設定】"
+    if not aff_id: return item_url
     
-    # 1. 楽天アフィリエイトの長いリンクを作成
-    if "hb.afl.rakuten.co.jp" not in url:
-        # PC用URLパラメータとしてエンコード
-        pc_param = urllib.parse.quote(url, safe='')
-        long_url = f"https://hb.afl.rakuten.co.jp/hgc/{aff_id}/?pc={pc_param}"
+    # 楽天アフィリエイトリンクの構築
+    if "hb.afl.rakuten.co.jp" not in item_url:
+        encoded_item_url = urllib.parse.quote(item_url, safe='')
+        long_aff_url = f"https://hb.afl.rakuten.co.jp/hgc/{aff_id}/?pc={encoded_item_url}"
     else:
-        long_url = url
+        long_aff_url = item_url
     
-    # 2. 仕上げにThreads用に短縮
-    return shorten_url(long_url)
+    # 💡 作成した長いリンクを即座に短縮
+    return shorten_url(long_aff_url)
 
 def save_to_sheets(sheet_id, g_json, row_data):
     if not sheet_id or not g_json: return False
@@ -150,7 +146,7 @@ def get_threads_engagement(token):
             try:
                 data = requests.get(f"https://graph.threads.net/v1.0/{th['id']}/insights?metric=views,likes,replies&access_token={token}").json().get("data", [])
                 m = {d.get('name'): (d.get('values', [{}])[0].get('value', 0)) for d in data}
-                th.update({'views': m.get('views', 0), 'like_count': m.get('likes', 0), 'reply_count': m.get('replies', 0)})
+                th.update({'views': m.get('views',0), 'like_count': m.get('likes',0), 'reply_count': m.get('replies',0)})
             except: th.update({'views':0, 'like_count':0, 'reply_count':0})
             return th
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor: return list(executor.map(fetch_insights, threads))
@@ -166,10 +162,9 @@ def get_rakuten_ranking(app_id, access_key, affiliate_id, genre_id):
 def generate_post_text(item_name, price, target_str, tone, length, custom_prompt, reference_post, api_key, image=None):
     if not api_key: return "❌ APIキーが未設定です"
     price_str = f"({price}円)" if price else ""
-    prompt = f"""あなたは、SNSでリアルな本音を発信するインフルエンサーです。商品「{item_name}」{price_str}を、ターゲット【{target_str}】に向けて、{tone}なテイストで約{length}文字で紹介してください。
-【絶対厳守】1. 宣伝感を消し、実体験の本音として書く。2. 禁止語：ご存知ですか、結論から、ですよね、いかがでしたか。3. 魅力を1点に絞り、読者が画像をタップしたくなる『余白』を残す。4. 文末に（文字）等本文と関係のない文言は入れない。"""
-    if reference_post: prompt += f"\n【文体手本】\n{reference_post}\n"
-    if custom_prompt: prompt += f"\n【特別指示】\n{custom_prompt}"
+    prompt = f"SNSインフルエンサーとして、商品「{item_name}」{price_str}をターゲット【{target_str}】へ{tone}に約{length}文字で紹介。本音レビュー風、宣伝感禁止、文末に（文字）等入れない。"
+    if reference_post: prompt += f"\n文体手本:\n{reference_post}\n"
+    if custom_prompt: prompt += f"\n指示:{custom_prompt}"
     
     client = genai.Client(api_key=api_key)
     for model_name in ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash']:
@@ -193,7 +188,7 @@ def post_to_threads(access_token, text, reply_to_id=None, image_url=None):
     return None
 
 # ==========================================
-# 🖥️ 初期化 ＆ データ同期
+# 🖥️ メイン ＆ データ同期
 # ==========================================
 if "api_keys" not in st.session_state:
     st.session_state["api_keys"] = {"rakuten_id": "", "rakuten_key": "", "rakuten_aff_id": "", "gemini": "", "threads": "", "sheet_id": "", "g_json": ""}
@@ -236,6 +231,7 @@ elif page == "2. 商品作成＆予約":
     else:
         templates = get_templates(api["sheet_id"], api["g_json"])
         tab1, tab2, tab3 = st.tabs(["🏆 ランキング", "🔗 URL", "📸 画像"])
+
         def draw_ui(k):
             c1, c2, c3 = st.columns(3)
             with c1: gen = st.radio("性別", ["女性", "男性", "指定なし"], key=f"gen_{k}")
@@ -252,11 +248,16 @@ elif page == "2. 商品作成＆予約":
         def show_final_ui(key, def_txt, def_url, def_img):
             with st.expander(f"✨ 投稿確認: {key[:10]}...", expanded=True):
                 ui = st.checkbox("🖼️ 画像あり", value=True, key=f"ui_{key}")
-                dr = st.text_input("🔗 ドライブの画像URLを入力", value=def_img if def_img else "", key=f"dr_{key}")
+                dr = st.text_input("🔗 ドライブ画像URL", value=def_img if def_img else "", key=f"dr_{key}")
                 m_k, r_k = f"mt_{key}", f"rt_{key}"
-                if m_k not in st.session_state: st.session_state[m_k] = def_txt
-                if r_k not in st.session_state: st.session_state[r_k] = f"▼ 詳細はこちら\n{def_url}"
-                st.text_area("本文", key=m_k, height=150); st.text_area("リプライ", key=r_k, height=80)
+                
+                # 💡 前回の長いURLが残らないよう、生成時に強制的に書き換えます
+                if m_k not in st.session_state or st.session_state.get('force_update'): st.session_state[m_k] = def_txt
+                if r_k not in st.session_state or st.session_state.get('force_update'): st.session_state[r_k] = f"▼ 詳細はこちら\n{def_url}"
+                
+                st.text_area("本文", key=m_k, height=150)
+                st.text_area("リプライ", key=r_k, height=80)
+                
                 f_img = convert_drive_link(dr) if ui and dr else (def_img if ui else None)
                 c1, c2 = st.columns(2)
                 if c1.button("🚀 今すぐ投稿", key=f"now_{key}"):
@@ -269,8 +270,8 @@ elif page == "2. 商品作成＆予約":
                         if save_to_sheets(api["sheet_id"], api["g_json"], row): st.success("保存完了")
 
         with tab1:
-            genres = {"🏆 総合": "0", "👗 レディース": "100371", "👔 メンズ": "551177", "👠 靴": "558885", "👜 バッグ": "216129", "⌚ 腕時計": "558929", "💄 美容": "100939", "💊 健康": "100143", "🏥 介護": "551169", "🍎 食品": "100227", "🍪 スイーツ": "551167", "🍹 飲料": "100316", "🍺 洋酒": "510915", "🍶 日本酒": "510901", "🛋 インテリア": "100804", "🍳 キッチン": "558944", "🚿 日用品": "215783", "🔌 家電": "562631", "📸 カメラ": "211742", "💻 パソコン": "100026", "📱 スマホ": "562637", "⚽ スポーツ": "101070", "⛳ ゴルフ": "101077", "🚗 車": "503190", "🧸 おもちゃ": "101164", "🎨 ホビー": "101165", "🎮 ゲーム": "101205", "🎸 楽器": "112493", "📚 本": "200376", "📀 CD・DVD": "101240", "🍼 ベビー": "100533", "🐱 ペット": "101213"}
-            sel_g = st.selectbox("ジャンルを選択", list(genres.keys()), key="sg_tab1")
+            genres = {"🏆 総合": "0", "👗 レディース": "100371", "👔 メンズ": "551177", "👠 靴": "558885", "👜 バッグ": "216129", "💄 美容": "100939", "🍎 食品": "100227", "🛋 インテリア": "100804", "🔌 家電": "562631", "⚽ スポーツ": "101070", "🚗 車": "503190", "🧸 おもちゃ": "101164", "🐱 ペット": "101213"}
+            sel_g = st.selectbox("ジャンル", list(genres.keys()), key="sg_tab1")
             if st.button("ランキング取得", key="br_tab1"):
                 st.session_state["it1"] = get_rakuten_ranking(api["rakuten_id"], api["rakuten_key"], api["rakuten_aff_id"], genres[sel_g])
             if "it1" in st.session_state:
@@ -280,23 +281,27 @@ elif page == "2. 商品作成＆予約":
                         c1, c2 = st.columns([1, 4])
                         c1.image(item["mediumImageUrls"][0]["imageUrl"])
                         if c2.checkbox(f"選ぶ: {item['itemName'][:50]}", key=f"ch1_{i}"):
-                            uf = c2.file_uploader("📸 解析用スクショ", type=["jpg","png"], key=f"uf1_{i}")
-                            item["u_img_file"] = uf
+                            item["u_img_file"] = c2.file_uploader("📸 解析用", type=["jpg","png"], key=f"uf1_{i}")
                             sel.append(item)
                 if sel:
                     st.divider(); t_str, tone, length, ref, cp = draw_ui("t1")
                     if st.button(f"✨ {len(sel)}件を一括生成", key="gen_tab1"):
-                        with st.spinner("AI文章作成中 ＆ URL短縮中..."):
+                        with st.spinner("AI作成 ＆ 短縮URL発行中..."):
+                            st.session_state['force_update'] = True # URLを強制上書き
                             res_list = []
                             for s in sel:
-                                img_input = Image.open(s["u_img_file"]) if s.get("u_img_file") else download_image(s["mediumImageUrls"][0]["imageUrl"])
-                                txt = generate_post_text(s["itemName"], s["itemPrice"], t_str, tone, length, cp, ref, api["gemini"], img_input)
-                                res_list.append({"item": s, "text": txt})
+                                img = Image.open(s["u_img_file"]) if s.get("u_img_file") else download_image(s["mediumImageUrls"][0]["imageUrl"])
+                                txt = generate_post_text(s["itemName"], s["itemPrice"], t_str, tone, length, cp, ref, api["gemini"], img)
+                                # 💡 ここで短縮を実行
+                                s_url = create_affiliate_link(s["itemUrl"], api["rakuten_aff_id"])
+                                res_list.append({"item": s, "text": txt, "short_url": s_url})
                             st.session_state["res1"] = res_list
+                            st.rerun()
+
             if "res1" in st.session_state:
+                st.session_state['force_update'] = False
                 for p in st.session_state["res1"]:
-                    aff = create_affiliate_link(p["item"]["itemUrl"], str(api["rakuten_aff_id"]).strip())
-                    show_final_ui(f"r1_{p['item']['itemCode']}", p["text"], aff, p["item"]["mediumImageUrls"][0]["imageUrl"])
+                    show_final_ui(f"r1_{p['item']['itemCode']}", p["text"], p["short_url"], p["item"]["mediumImageUrls"][0]["imageUrl"])
 
         with tab2:
             url_in = st.text_input("楽天商品URL", key="u_tab2")
@@ -308,10 +313,15 @@ elif page == "2. 商品作成＆予約":
                 it = st.session_state["it2"]; st.image(it["img"], width=150); t_str, tone, length, ref, cp = draw_ui("t2")
                 if st.button("✨ 本文作成", key="gen_tab2"):
                     with st.spinner("作成 ＆ 短縮中..."):
-                        st.session_state["res2"] = {"text": generate_post_text(it["name"], "", t_str, tone, length, cp, ref, api["gemini"], download_image(it["img"]))}
-            if "res2" in st.session_state: 
-                aff_url_t2 = create_affiliate_link(st.session_state["it2"]["url"], api["rakuten_aff_id"])
-                show_final_ui("r2", st.session_state["res2"]["text"], aff_url_t2, st.session_state["it2"]["img"])
+                        st.session_state['force_update'] = True
+                        st.session_state["res2"] = {
+                            "text": generate_post_text(it["name"], "", t_str, tone, length, cp, ref, api["gemini"], download_image(it["img"])),
+                            "url": create_affiliate_link(it["url"], api["rakuten_aff_id"])
+                        }
+                        st.rerun()
+            if "res2" in st.session_state:
+                st.session_state['force_update'] = False
+                show_final_ui("r2", st.session_state["res2"]["text"], st.session_state["res2"]["url"], st.session_state["it2"]["img"])
 
         with tab3:
             img_url_t3 = st.text_input("🔗 画像URL", key="u_tab3")
@@ -319,10 +329,14 @@ elif page == "2. 商品作成＆予約":
             if st.button("✨ 本文を作成", key="gen_tab3"):
                 if img_url_t3:
                     with st.spinner("解析 ＆ 短縮中..."):
-                        st.session_state["res3"] = {"text": generate_post_text(hint_t3, "", t_str, tone, length, cp, ref, api["gemini"], download_image(img_url_t3)), "url": img_url_t3}
-                else: st.error("画像URLを入力してください。")
+                        st.session_state['force_update'] = True
+                        st.session_state["res3"] = {
+                            "text": generate_post_text(hint_t3, "", t_str, tone, length, cp, ref, api["gemini"], download_image(img_url_t3)),
+                            "url": img_url_t3 # 画像タブは別途アフィリンク入力が必要
+                        }
+                        st.rerun()
             if "res3" in st.session_state:
-                uf_t3 = st.file_uploader("📸 【追加】スクショ", type=["jpg","png"], key="uf_tab3")
+                st.session_state['force_update'] = False
                 aff_t3 = st.text_input("🔗 アフィ商品URL", key="aff_tab3")
                 final_aff = create_affiliate_link(aff_t3, api["rakuten_aff_id"]) if aff_t3 else "【URL未設定】"
                 show_final_ui("res3_f", st.session_state["res3"]["text"], final_aff, st.session_state["res3"]["url"])
@@ -346,7 +360,7 @@ elif page == "4. API設定":
     st.title("⚙️ API設定")
     with st.expander("👤 管理者モード (Secretsロード)", expanded=True):
         pw = st.text_input("合言葉", type="password", key="m_pw_in")
-        if st.button("一括ロードしてシステムに反映", key="b_secrets_load"):
+        if st.button("一括ロード", key="b_secrets_load"):
             if pw == st.secrets.get("master_password"):
                 st.session_state["api_keys"].update({"rakuten_id":st.secrets.get("rakuten_id",""),"rakuten_key":st.secrets.get("rakuten_key",""),"rakuten_aff_id":st.secrets.get("rakuten_aff_id",""),"gemini":st.secrets.get("gemini_key",""),"threads":st.secrets.get("threads_token",""),"sheet_id":st.secrets.get("sheet_id",""),"g_json":st.secrets.get("g_json","")})
                 st.success("✅ ロードしました！"); st.rerun()
