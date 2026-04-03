@@ -21,29 +21,36 @@ st.set_page_config(page_title="Threads Marketing Pro", layout="wide", initial_si
 
 st.markdown("""
 <style>
-    /* 1. 右上のメニュー、デプロイ、GitHubバッジ、フッターをすべて非表示 */
+    /* 1. 右上のツールバー、GitHubバッジ、デプロイボタンなどを根こそぎ非表示 */
     [data-testid="stHeaderActionElements"], 
     .stAppDeployButton, 
     #MainMenu, 
     footer, 
-    [data-testid="stViewerBadge"] { 
+    .viewerBadge_container__1QSob,
+    [data-testid="stViewerBadge"],
+    a[href*="github.com"] { 
         display: none !important; 
+        visibility: hidden !important;
+        height: 0 !important;
+        width: 0 !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
     }
     
-    /* 2. ヘッダー自体の表示設定 */
+    /* 2. ヘッダー自体の背景を透明化し、クリックを無効化（メニューボタン以外） */
     header { 
-        visibility: visible !important; 
         background: transparent !important; 
     }
 
-    /* 3. 左上の「≡」ボタンだけはスマホで操作するために表示（青色に指定） */
+    /* 3. 左上の「≡」ボタン（メニュー）だけを救出 */
     [data-testid="stSidebarCollapsedControl"] {
         display: flex !important;
         visibility: visible !important;
         color: #007AFF !important;
+        z-index: 999999; /* 最前面に持ってくる */
     }
 
-    /* アプリ全体の見た目調整 */
+    /* アプリ全体のフォント */
     .stApp { font-family: 'Helvetica Neue', Arial, sans-serif; }
 </style>
 """, unsafe_allow_html=True)
