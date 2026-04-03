@@ -21,32 +21,33 @@ st.set_page_config(page_title="Threads Marketing Pro", layout="wide", initial_si
 
 st.markdown("""
 <style>
-    /* 右側のデプロイ、共有、三点リーダーメニューを隠す */
-    [data-testid="stHeaderActionElements"], .stAppDeployButton, #MainMenu, footer { 
+    /* 1. 右上のメニュー、デプロイ、GitHubバッジ、フッターをすべて非表示 */
+    [data-testid="stHeaderActionElements"], 
+    .stAppDeployButton, 
+    #MainMenu, 
+    footer, 
+    [data-testid="stViewerBadge"] { 
         display: none !important; 
     }
     
-    /* ヘッダー自体は表示し、背景を透明にする */
+    /* 2. ヘッダー自体の表示設定 */
     header { 
         visibility: visible !important; 
         background: transparent !important; 
     }
 
-    /* 【重要】スマホでサイドバーを開くための「≡」ボタンだけは強制的に表示する */
+    /* 3. 左上の「≡」ボタンだけはスマホで操作するために表示（青色に指定） */
     [data-testid="stSidebarCollapsedControl"] {
         display: flex !important;
         visibility: visible !important;
-        color: #007AFF !important; /* ボタンの色を青にして目立たせる */
+        color: #007AFF !important;
     }
 
-    /* アプリ全体のフォントなど */
+    /* アプリ全体の見た目調整 */
     .stApp { font-family: 'Helvetica Neue', Arial, sans-serif; }
-    [data-testid="stVerticalBlockBorderWrapper"] { 
-        border-radius: 12px; padding: 20px; margin-bottom: 15px; 
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-    }
 </style>
 """, unsafe_allow_html=True)
+
 
 
 # ==========================================
