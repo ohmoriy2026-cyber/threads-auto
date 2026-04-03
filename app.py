@@ -21,20 +21,33 @@ st.set_page_config(page_title="Threads Marketing Pro", layout="wide", initial_si
 
 st.markdown("""
 <style>
-    [data-testid="stHeaderActionElements"], [data-testid="stToolbar"], .stAppDeployButton, #MainMenu, footer { display: none !important; }
-    header { visibility: visible !important; background: transparent !important; }
+    /* 右側のデプロイ、共有、三点リーダーメニューを隠す */
+    [data-testid="stHeaderActionElements"], .stAppDeployButton, #MainMenu, footer { 
+        display: none !important; 
+    }
+    
+    /* ヘッダー自体は表示し、背景を透明にする */
+    header { 
+        visibility: visible !important; 
+        background: transparent !important; 
+    }
+
+    /* 【重要】スマホでサイドバーを開くための「≡」ボタンだけは強制的に表示する */
+    [data-testid="stSidebarCollapsedControl"] {
+        display: flex !important;
+        visibility: visible !important;
+        color: #007AFF !important; /* ボタンの色を青にして目立たせる */
+    }
+
+    /* アプリ全体のフォントなど */
     .stApp { font-family: 'Helvetica Neue', Arial, sans-serif; }
     [data-testid="stVerticalBlockBorderWrapper"] { 
         border-radius: 12px; padding: 20px; margin-bottom: 15px; 
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: transform 0.2s ease;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     }
-    .stButton>button { 
-        background-color: #007AFF !important; color: #FFFFFF !important; font-weight: bold; 
-        border-radius: 8px; width: 100%; border: none; padding: 0.5rem 1rem;
-    }
-    [data-testid="stMetricValue"] { font-size: 2rem !important; font-weight: 800 !important; color: #007AFF !important; }
 </style>
 """, unsafe_allow_html=True)
+
 
 # ==========================================
 # ⚙️ 関数群
