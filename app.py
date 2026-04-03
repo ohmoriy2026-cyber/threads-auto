@@ -15,45 +15,57 @@ import urllib.parse
 from streamlit_local_storage import LocalStorage
 
 # ==========================================
-# 🎨 デザイナー設計：モダンUI
+# 🎨 デザイナー設計：モダンUI（完全版）
 # ==========================================
 st.set_page_config(page_title="Threads Marketing Pro", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
-    /* 1. 右上のツールバー、GitHubバッジ、デプロイボタンなどを根こそぎ非表示 */
+    /* 1. フォントと基本デザイン（ユーザー様のお気に入り設定） */
+    .stApp { 
+        font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; 
+    }
+    [data-testid="stVerticalBlockBorderWrapper"] { 
+        border-radius: 12px; padding: 20px; margin-bottom: 15px; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:hover {
+        transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.08);
+    }
+    .stButton>button { 
+        background-color: #007AFF !important; color: #FFFFFF !important; font-weight: bold; 
+        border-radius: 8px; width: 100%; border: none; padding: 0.5rem 1rem; transition: all 0.2s;
+    }
+    .stButton>button:hover { background-color: #0056b3 !important; transform: scale(1.02); }
+    [data-testid="stMetricValue"] { font-size: 2rem !important; font-weight: 800 !important; color: #007AFF !important; }
+
+    /* 2. 【最重要】右上のボタン群（Deploy, Share, Star, GitHub等）を根こそぎ消す */
+    /* ヘッダーの右側にある要素を特定して消去 */
     [data-testid="stHeaderActionElements"], 
     .stAppDeployButton, 
     #MainMenu, 
     footer, 
-    .viewerBadge_container__1QSob,
     [data-testid="stViewerBadge"],
-    a[href*="github.com"] { 
+    div[data-testid="stToolbar"] { 
         display: none !important; 
         visibility: hidden !important;
-        height: 0 !important;
-        width: 0 !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
-    }
-    
-    /* 2. ヘッダー自体の背景を透明化し、クリックを無効化（メニューボタン以外） */
-    header { 
-        background: transparent !important; 
     }
 
-    /* 3. 左上の「≡」ボタン（メニュー）だけを救出 */
+    /* 3. ヘッダー自体の設定（左のボタンだけ活かす） */
+    header {
+        background-color: transparent !important;
+    }
+
+    /* 4. スマホで消えがちな「左上のメニューボタン(≡)」を強制表示 */
     [data-testid="stSidebarCollapsedControl"] {
         display: flex !important;
         visibility: visible !important;
-        color: #007AFF !important;
-        z-index: 999999; /* 最前面に持ってくる */
+        color: #007AFF !important; /* ボタンをブランドカラーの青に */
+        z-index: 999999;
     }
-
-    /* アプリ全体のフォント */
-    .stApp { font-family: 'Helvetica Neue', Arial, sans-serif; }
 </style>
 """, unsafe_allow_html=True)
+
 
 
 
