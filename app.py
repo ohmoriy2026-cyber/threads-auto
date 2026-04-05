@@ -15,113 +15,144 @@ import urllib.parse
 from streamlit_local_storage import LocalStorage
 
 # ==========================================
-# 🎨 決定版：右側ボタン完全削除 ＆ 左側メニュー復活
+# 🎨 ナビバー固定版（サイドバー不使用）
 # ==========================================
-st.set_page_config(page_title="Threads Marketing Pro", layout="wide", initial_sidebar_state="expanded")
-st.markdown("""
-<style>
-    /* 1. 基本デザイン（影付きの枠や青いボタン）は維持 */
-    .stApp { 
-        font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; 
-    }
-    [data-testid="stVerticalBlockBorderWrapper"] { 
-        border-radius: 12px; padding: 20px; margin-bottom: 15px; 
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-    }
-    .stButton>button { 
-        background-color: #007AFF !important; color: #FFFFFF !important; font-weight: bold; 
-        border-radius: 8px; width: 100%; border: none; padding: 0.5rem 1rem;
-    }
-    [data-testid="stMetricValue"] { font-size: 2rem !important; font-weight: 800 !important; color: #007AFF !important; }
+st.set_page_config(page_title="Threads Marketing Pro", layout="wide", initial_sidebar_state="collapsed")
 
-    /* 2. 【右上の青枠・各種ボタン・GitHubリンク】完全非表示 */
+# ページ状態の初期化
+if "current_page" not in st.session_state:
+    st.session_state["current_page"] = "1. ダッシュボード"
+
+# クエリパラメータでページ切り替え
+qp = st.query_params
+if "page" in qp:
+    page_map = {
+        "dashboard": "1. ダッシュボード",
+        "products": "2. 商品作成＆予約",
+        "engagement": "3. エンゲージメント分析",
+        "api": "4. API設定",
+        "templates": "5. テンプレート管理",
+    }
+    if qp["page"] in page_map:
+        st.session_state["current_page"] = page_map[qp["page"]]
+
+page = st.session_state["current_page"]
+
+# アクティブ判定
+def is_active(key):
+    active_map = {
+        "dashboard": "1. ダッシュボード",
+        "products": "2. 商品作成＆予約",
+        "engagement": "3. エンゲージメント分析",
+        "api": "4. API設定",
+        "templates": "5. テンプレート管理",
+    }
+    return "active" if active_map.get(key) == page else ""
+
+st.markdown(f"""
+<style>
+    .stApp {{
+        font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+    }}
+    [data-testid="stVerticalBlockBorderWrapper"] {{
+        border-radius: 12px; padding: 20px; margin-bottom: 15px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }}
+    .stButton>button {{
+        background-color: #007AFF !important; color: #FFFFFF !important; font-weight: bold;
+        border-radius: 8px; width: 100%; border: none; padding: 0.5rem 1rem;
+    }}
+    [data-testid="stMetricValue"] {{ font-size: 2rem !important; font-weight: 800 !important; color: #007AFF !important; }}
+
+    /* 右上ボタン・GitHubリンク完全非表示 */
     .stAppDeployButton,
     [data-testid="stHeaderActionElements"],
     [data-testid="stViewerBadge"],
     [data-testid="stDecoration"],
     [data-testid="stToolbar"],
     [data-testid="stToolbarActions"],
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebar"],
     a[href*="github.com"],
-    a[href*="github"] svg,
     .stActionButton,
     #MainMenu,
-    footer {
+    header,
+    footer {{
         display: none !important;
         visibility: hidden !important;
         width: 0 !important;
         height: 0 !important;
         overflow: hidden !important;
-    }
+    }}
 
-    /* 3. 【左側トグルボタン】全パターンのセレクタを網羅して確実に表示 */
-    [data-testid="stSidebarCollapsedControl"],
-    [data-testid="collapsedControl"],
-    button[kind="header"],
-    section[data-testid="stSidebar"] + div button,
-    .st-emotion-cache-czk5ss,
-    .st-emotion-cache-1dp5vir {
-        display: flex !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        pointer-events: auto !important;
-        position: fixed !important;
-        top: 10px !important;
-        left: 10px !important;
-        z-index: 9999999 !important;
-        background-color: #007AFF !important;
-        border-radius: 50% !important;
-        width: 44px !important;
-        height: 44px !important;
-        min-width: 44px !important;
-        min-height: 44px !important;
-        align-items: center !important;
-        justify-content: center !important;
-        box-shadow: 0 2px 12px rgba(0,122,255,0.5) !important;
-        border: none !important;
-    }
+    /* 固定ナビゲーションバー */
+    .top-nav {{
+        position: fixed;
+        top: 0; left: 0; right: 0;
+        z-index: 9999999;
+        background: #ffffff;
+        border-bottom: 2px solid #007AFF;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }}
+    .top-nav ul {{
+        display: flex;
+        flex-wrap: wrap;
+        list-style: none;
+        margin: 0; padding: 0;
+        align-items: center;
+    }}
+    .top-nav li a {{
+        display: block;
+        padding: 12px 14px;
+        color: #333333;
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+        border-bottom: 3px solid transparent;
+        transition: all 0.2s;
+    }}
+    .top-nav li a:hover {{
+        color: #007AFF;
+        border-bottom-color: #007AFF;
+        background: rgba(0,122,255,0.05);
+    }}
+    .top-nav li a.active {{
+        color: #007AFF;
+        border-bottom-color: #007AFF;
+        background: rgba(0,122,255,0.07);
+    }}
 
-    /* トグルボタン内のアイコン */
-    [data-testid="stSidebarCollapsedControl"] svg,
-    [data-testid="collapsedControl"] svg,
-    button[kind="header"] svg {
-        color: #ffffff !important;
-        fill: #ffffff !important;
-        stroke: #ffffff !important;
-        width: 22px !important;
-        height: 22px !important;
-    }
+    /* スマホ対応 */
+    @media (max-width: 640px) {{
+        .top-nav li a {{
+            padding: 10px 8px;
+            font-size: 11px;
+        }}
+    }}
+    @media (max-width: 400px) {{
+        .top-nav li a {{
+            padding: 8px 6px;
+            font-size: 10px;
+        }}
+    }}
 
-    /* 4. サイドバー自体が閉じているときもボタンだけは表示 */
-    [data-testid="stSidebar"][aria-expanded="false"] ~ * [data-testid="stSidebarCollapsedControl"],
-    [data-testid="stSidebar"][aria-expanded="false"] ~ * [data-testid="collapsedControl"] {
-        display: flex !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-    }
-
-    /* 5. スマホ専用（768px以下）追加強化 */
-    @media (max-width: 768px) {
-        [data-testid="stSidebarCollapsedControl"],
-        [data-testid="collapsedControl"],
-        button[kind="header"] {
-            display: flex !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-            top: 8px !important;
-            left: 8px !important;
-            width: 48px !important;
-            height: 48px !important;
-            min-width: 48px !important;
-            min-height: 48px !important;
-            z-index: 9999999 !important;
-        }
-    }
-
-    /* 6. ヘッダー透明化 */
-    header {
-        background-color: transparent !important;
-    }
+    /* ナビバー分コンテンツを下げる */
+    .main .block-container {{
+        padding-top: 65px !important;
+    }}
 </style>
+
+<nav class="top-nav">
+  <ul>
+    <li><a href="?page=dashboard" class="{is_active('dashboard')}">📊 ダッシュボード</a></li>
+    <li><a href="?page=products" class="{is_active('products')}">🛍 商品作成</a></li>
+    <li><a href="?page=engagement" class="{is_active('engagement')}">📈 分析</a></li>
+    <li><a href="?page=api" class="{is_active('api')}">⚙️ API設定</a></li>
+    <li><a href="?page=templates" class="{is_active('templates')}">📝 テンプレート</a></li>
+  </ul>
+</nav>
 """, unsafe_allow_html=True)
 
 # ==========================================
@@ -145,11 +176,9 @@ def download_image(url):
         return Image.open(io.BytesIO(res.content))
     except: return None
 
-# 💡 精度を上げた短縮URL関数
 def shorten_url(long_url):
     if not long_url or "http" not in long_url: return long_url
     try:
-        # 楽天リンク特有の記号問題を解決するための徹底エンコード
         safe_url = urllib.parse.quote(long_url, safe='')
         res = requests.get(f"http://tinyurl.com/api-create?url={safe_url}", timeout=10)
         if res.status_code == 200 and "tinyurl.com" in res.text:
@@ -157,7 +186,6 @@ def shorten_url(long_url):
     except: pass
     return long_url
 
-# 💡 アフィリエイト生成 ＆ 短縮
 def create_affiliate_link(url, aff_id):
     if not url: return "【URL未設定】"
     if not aff_id: return url
@@ -263,10 +291,8 @@ if not st.session_state["api_keys"]["rakuten_id"]:
     stored = local_storage.getItem("threads_marketing_keys")
     if stored: st.session_state["api_keys"].update(stored)
 
-# 💡 画面更新用の世代管理（これがないとURLが長いまま残ります）
 if "gen_count" not in st.session_state: st.session_state["gen_count"] = 0
 
-page = st.sidebar.radio("メニュー", ["1. ダッシュボード", "2. 商品作成＆予約", "3. エンゲージメント分析", "4. API設定", "5. テンプレート管理"])
 api = st.session_state["api_keys"]
 
 # --- 1. ダッシュボード ---
@@ -296,9 +322,8 @@ elif page == "2. 商品作成＆予約":
     else:
         templates = get_templates(api["sheet_id"], api["g_json"])
         tab1, tab2, tab3 = st.tabs(["🏆 ランキング", "🔗 URL", "📸 画像"])
-        
+
         def show_final_ui(key, def_txt, def_url, def_img):
-            # 💡 keyにgen_countを含めることで、生成のたびに部品を「新品」にして強制更新させます
             unique_key = f"{key}_{st.session_state['gen_count']}"
             with st.expander(f"✨ 投稿確認", expanded=True):
                 ui = st.checkbox("🖼️ 画像あり", value=True, key=f"ui_{unique_key}")
@@ -342,10 +367,9 @@ elif page == "2. 商品作成＆予約":
                     sel_tmp = st.selectbox("🧠 テンプレート適用", ["手動入力"] + [t["title"] for t in templates], key="tmp_t1")
                     ref = next((t["content"] for t in templates if t["title"] == sel_tmp), "") if sel_tmp != "手動入力" else ""
                     cp = st.text_area("✍️ 特別指示", key="cp_t1")
-                    
                     if st.button(f"✨ {len(sel)}件を一括生成", key="gen_btn_t1"):
                         with st.spinner("AI文章作成 ＆ 短縮URL発行中..."):
-                            st.session_state["gen_count"] += 1 # 💡 IDを更新して表示を強制リセット
+                            st.session_state["gen_count"] += 1
                             res_list = []
                             for s in sel:
                                 img = Image.open(s["u_img_file"]) if s.get("u_img_file") else download_image(s["mediumImageUrls"][0]["imageUrl"])
