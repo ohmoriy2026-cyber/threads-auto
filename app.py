@@ -18,7 +18,6 @@ from streamlit_local_storage import LocalStorage
 # 🎨 決定版：右側ボタン完全削除 ＆ 左側メニュー復活
 # ==========================================
 st.set_page_config(page_title="Threads Marketing Pro", layout="wide", initial_sidebar_state="expanded")
-
 st.markdown("""
 <style>
     /* 1. 基本デザイン（影付きの枠や青いボタン）は維持 */
@@ -35,38 +34,63 @@ st.markdown("""
     }
     [data-testid="stMetricValue"] { font-size: 2rem !important; font-weight: 800 !important; color: #007AFF !important; }
 
-    /* 2. 【右側】GitHub, Deploy, Share, Star などを完全に消し去る */
-    /* ボタンそのものだけでなく、それらが入っているコンテナごと非表示にします */
-    .stAppDeployButton, 
-    [data-testid="stHeaderActionElements"], 
-    [data-testid="stViewerBadge"], 
-    #MainMenu, 
-    footer { 
-        display: none !important; 
+    /* 2. 【右上の青枠・各種ボタン】完全非表示 */
+    .stAppDeployButton,
+    [data-testid="stHeaderActionElements"],
+    [data-testid="stViewerBadge"],
+    [data-testid="stDecoration"],
+    #MainMenu,
+    footer {
+        display: none !important;
         visibility: hidden !important;
         width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
     }
 
-    /* 3. 【左側】スマホでメニューを開くためのボタン（≡ または >>）を救出 */
-    /* これが消えるとスマホでメニューが出せなくなります */
+    /* 3. 【左側トグルボタン】PC・スマホ両方で確実に表示 */
     [data-testid="stSidebarCollapsedControl"] {
         display: flex !important;
         visibility: visible !important;
-        background-color: rgba(0, 122, 255, 0.1) !important; /* ボタンの背景を薄い青にして分かりやすく */
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        position: fixed !important;
+        top: 10px !important;
+        left: 10px !important;
+        z-index: 9999999 !important;
+        background-color: #007AFF !important;
         border-radius: 50% !important;
-        color: #007AFF !important; /* ボタンの色を青に */
-        z-index: 1000000 !important; /* 最前面に配置 */
-        margin-left: 10px !important;
-        margin-top: 5px !important;
+        width: 40px !important;
+        height: 40px !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-shadow: 0 2px 8px rgba(0,122,255,0.4) !important;
+    }
+    [data-testid="stSidebarCollapsedControl"] svg {
+        color: #ffffff !important;
+        fill: #ffffff !important;
+        width: 20px !important;
+        height: 20px !important;
     }
 
-    /* 4. ヘッダー自体の余計な装飾をカット */
+    /* 4. スマホ用の追加対応（画面幅768px以下） */
+    @media (max-width: 768px) {
+        [data-testid="stSidebarCollapsedControl"] {
+            display: flex !important;
+            visibility: visible !important;
+            top: 8px !important;
+            left: 8px !important;
+            width: 44px !important;
+            height: 44px !important;
+        }
+    }
+
+    /* 5. ヘッダー透明化 */
     header {
         background-color: transparent !important;
     }
 </style>
 """, unsafe_allow_html=True)
-
 
 # ==========================================
 # ⚙️ 関数群
