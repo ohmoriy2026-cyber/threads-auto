@@ -34,11 +34,16 @@ st.markdown("""
     }
     [data-testid="stMetricValue"] { font-size: 2rem !important; font-weight: 800 !important; color: #007AFF !important; }
 
-    /* 2. 【右上の青枠・各種ボタン】完全非表示 */
+    /* 2. 【右上の青枠・各種ボタン・GitHubリンク】完全非表示 */
     .stAppDeployButton,
     [data-testid="stHeaderActionElements"],
     [data-testid="stViewerBadge"],
     [data-testid="stDecoration"],
+    [data-testid="stToolbar"],
+    [data-testid="stToolbarActions"],
+    a[href*="github.com"],
+    a[href*="github"] svg,
+    .stActionButton,
     #MainMenu,
     footer {
         display: none !important;
