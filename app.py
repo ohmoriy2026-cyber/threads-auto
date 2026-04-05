@@ -15,114 +15,107 @@ import urllib.parse
 from streamlit_local_storage import LocalStorage
 
 # ==========================================
-# 🎨 決定版：右側ボタン完全削除 ＆ 左側メニュー復活
+# 🎨 ページ設定
 # ==========================================
-st.set_page_config(page_title="Threads Marketing Pro", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Threads Marketing Pro", layout="wide", initial_sidebar_state="collapsed")
+
+# ページ状態の初期化
+if "current_page" not in st.session_state:
+    st.session_state["current_page"] = "1. ダッシュボード"
+
+page = st.session_state["current_page"]
+
+# ==========================================
+# 🧭 固定ナビゲーションバー（Streamlitボタン）
+# ==========================================
 st.markdown("""
 <style>
-    /* 1. 基本デザイン（影付きの枠や青いボタン）は維持 */
-    .stApp { 
-        font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; 
+    .stApp {
+        font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
     }
-    [data-testid="stVerticalBlockBorderWrapper"] { 
-        border-radius: 12px; padding: 20px; margin-bottom: 15px; 
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        border-radius: 12px; padding: 20px; margin-bottom: 15px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-    }
-    .stButton>button { 
-        background-color: #007AFF !important; color: #FFFFFF !important; font-weight: bold; 
-        border-radius: 8px; width: 100%; border: none; padding: 0.5rem 1rem;
     }
     [data-testid="stMetricValue"] { font-size: 2rem !important; font-weight: 800 !important; color: #007AFF !important; }
 
-    /* 2. 【右上の青枠・各種ボタン・GitHubリンク】完全非表示 */
+    /* 右上・GitHubリンク・サイドバー完全非表示 */
     .stAppDeployButton,
     [data-testid="stHeaderActionElements"],
     [data-testid="stViewerBadge"],
     [data-testid="stDecoration"],
     [data-testid="stToolbar"],
     [data-testid="stToolbarActions"],
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebar"],
     a[href*="github.com"],
-    a[href*="github"] svg,
     .stActionButton,
-    #MainMenu,
-    footer {
+    #MainMenu, header, footer {
         display: none !important;
         visibility: hidden !important;
-        width: 0 !important;
-        height: 0 !important;
+        width: 0 !important; height: 0 !important;
         overflow: hidden !important;
     }
 
-    /* 3. 【左側トグルボタン】全パターンのセレクタを網羅して確実に表示 */
-    [data-testid="stSidebarCollapsedControl"],
-    [data-testid="collapsedControl"],
-    button[kind="header"],
-    section[data-testid="stSidebar"] + div button,
-    .st-emotion-cache-czk5ss,
-    .st-emotion-cache-1dp5vir {
-        display: flex !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        pointer-events: auto !important;
+    /* ナビバー全体 */
+    [data-testid="stHorizontalBlock"].nav-bar {
         position: fixed !important;
-        top: 10px !important;
-        left: 10px !important;
+        top: 0 !important; left: 0 !important; right: 0 !important;
         z-index: 9999999 !important;
-        background-color: #007AFF !important;
-        border-radius: 50% !important;
-        width: 44px !important;
-        height: 44px !important;
-        min-width: 44px !important;
-        min-height: 44px !important;
-        align-items: center !important;
-        justify-content: center !important;
-        box-shadow: 0 2px 12px rgba(0,122,255,0.5) !important;
+        background: #ffffff !important;
+        border-bottom: 2px solid #007AFF !important;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.08) !important;
+        padding: 4px 8px !important;
+    }
+
+    /* ナビボタン共通 */
+    div[data-testid="stHorizontalBlock"] > div > div > div > button {
+        background: transparent !important;
+        color: #444 !important;
         border: none !important;
+        border-bottom: 3px solid transparent !important;
+        border-radius: 0 !important;
+        font-size: 12px !important;
+        font-weight: 600 !important;
+        padding: 8px 6px !important;
+        width: 100% !important;
+        box-shadow: none !important;
+        transition: all 0.2s !important;
+        white-space: nowrap !important;
+    }
+    div[data-testid="stHorizontalBlock"] > div > div > div > button:hover {
+        color: #007AFF !important;
+        border-bottom-color: #007AFF !important;
+        background: rgba(0,122,255,0.05) !important;
     }
 
-    /* トグルボタン内のアイコン */
-    [data-testid="stSidebarCollapsedControl"] svg,
-    [data-testid="collapsedControl"] svg,
-    button[kind="header"] svg {
-        color: #ffffff !important;
-        fill: #ffffff !important;
-        stroke: #ffffff !important;
-        width: 22px !important;
-        height: 22px !important;
-    }
-
-    /* 4. サイドバー自体が閉じているときもボタンだけは表示 */
-    [data-testid="stSidebar"][aria-expanded="false"] ~ * [data-testid="stSidebarCollapsedControl"],
-    [data-testid="stSidebar"][aria-expanded="false"] ~ * [data-testid="collapsedControl"] {
-        display: flex !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-    }
-
-    /* 5. スマホ専用（768px以下）追加強化 */
-    @media (max-width: 768px) {
-        [data-testid="stSidebarCollapsedControl"],
-        [data-testid="collapsedControl"],
-        button[kind="header"] {
-            display: flex !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-            top: 8px !important;
-            left: 8px !important;
-            width: 48px !important;
-            height: 48px !important;
-            min-width: 48px !important;
-            min-height: 48px !important;
-            z-index: 9999999 !important;
-        }
-    }
-
-    /* 6. ヘッダー透明化 */
-    header {
-        background-color: transparent !important;
+    /* コンテンツをナビバー分下げる */
+    .main .block-container {
+        padding-top: 70px !important;
+        max-width: 100% !important;
     }
 </style>
 """, unsafe_allow_html=True)
+
+# ナビボタン描画
+nav_pages = [
+    ("📊 ダッシュボード", "1. ダッシュボード"),
+    ("🛍 商品作成", "2. 商品作成＆予約"),
+    ("📈 分析", "3. エンゲージメント分析"),
+    ("⚙️ API設定", "4. API設定"),
+    ("📝 テンプレート", "5. テンプレート管理"),
+]
+
+cols = st.columns(len(nav_pages))
+for col, (label, page_name) in zip(cols, nav_pages):
+    # アクティブなボタンは色を変える
+    btn_label = f"**{label}**" if page == page_name else label
+    if col.button(btn_label, key=f"nav_{page_name}", use_container_width=True):
+        st.session_state["current_page"] = page_name
+        st.rerun()
+
+st.divider()
 
 # ==========================================
 # ⚙️ 関数群
@@ -145,11 +138,9 @@ def download_image(url):
         return Image.open(io.BytesIO(res.content))
     except: return None
 
-# 💡 精度を上げた短縮URL関数
 def shorten_url(long_url):
     if not long_url or "http" not in long_url: return long_url
     try:
-        # 楽天リンク特有の記号問題を解決するための徹底エンコード
         safe_url = urllib.parse.quote(long_url, safe='')
         res = requests.get(f"http://tinyurl.com/api-create?url={safe_url}", timeout=10)
         if res.status_code == 200 and "tinyurl.com" in res.text:
@@ -157,7 +148,6 @@ def shorten_url(long_url):
     except: pass
     return long_url
 
-# 💡 アフィリエイト生成 ＆ 短縮
 def create_affiliate_link(url, aff_id):
     if not url: return "【URL未設定】"
     if not aff_id: return url
@@ -263,10 +253,8 @@ if not st.session_state["api_keys"]["rakuten_id"]:
     stored = local_storage.getItem("threads_marketing_keys")
     if stored: st.session_state["api_keys"].update(stored)
 
-# 💡 画面更新用の世代管理（これがないとURLが長いまま残ります）
 if "gen_count" not in st.session_state: st.session_state["gen_count"] = 0
 
-page = st.sidebar.radio("メニュー", ["1. ダッシュボード", "2. 商品作成＆予約", "3. エンゲージメント分析", "4. API設定", "5. テンプレート管理"])
 api = st.session_state["api_keys"]
 
 # --- 1. ダッシュボード ---
@@ -296,9 +284,8 @@ elif page == "2. 商品作成＆予約":
     else:
         templates = get_templates(api["sheet_id"], api["g_json"])
         tab1, tab2, tab3 = st.tabs(["🏆 ランキング", "🔗 URL", "📸 画像"])
-        
+
         def show_final_ui(key, def_txt, def_url, def_img):
-            # 💡 keyにgen_countを含めることで、生成のたびに部品を「新品」にして強制更新させます
             unique_key = f"{key}_{st.session_state['gen_count']}"
             with st.expander(f"✨ 投稿確認", expanded=True):
                 ui = st.checkbox("🖼️ 画像あり", value=True, key=f"ui_{unique_key}")
@@ -342,10 +329,9 @@ elif page == "2. 商品作成＆予約":
                     sel_tmp = st.selectbox("🧠 テンプレート適用", ["手動入力"] + [t["title"] for t in templates], key="tmp_t1")
                     ref = next((t["content"] for t in templates if t["title"] == sel_tmp), "") if sel_tmp != "手動入力" else ""
                     cp = st.text_area("✍️ 特別指示", key="cp_t1")
-                    
                     if st.button(f"✨ {len(sel)}件を一括生成", key="gen_btn_t1"):
                         with st.spinner("AI文章作成 ＆ 短縮URL発行中..."):
-                            st.session_state["gen_count"] += 1 # 💡 IDを更新して表示を強制リセット
+                            st.session_state["gen_count"] += 1
                             res_list = []
                             for s in sel:
                                 img = Image.open(s["u_img_file"]) if s.get("u_img_file") else download_image(s["mediumImageUrls"][0]["imageUrl"])
