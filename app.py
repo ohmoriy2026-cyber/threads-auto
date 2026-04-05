@@ -53,8 +53,13 @@ st.markdown("""
         overflow: hidden !important;
     }
 
-    /* 3. 【左側トグルボタン】PC・スマホ両方で確実に表示 */
-    [data-testid="stSidebarCollapsedControl"] {
+    /* 3. 【左側トグルボタン】全パターンのセレクタを網羅して確実に表示 */
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="collapsedControl"],
+    button[kind="header"],
+    section[data-testid="stSidebar"] + div button,
+    .st-emotion-cache-czk5ss,
+    .st-emotion-cache-1dp5vir {
         display: flex !important;
         visibility: visible !important;
         opacity: 1 !important;
@@ -65,32 +70,54 @@ st.markdown("""
         z-index: 9999999 !important;
         background-color: #007AFF !important;
         border-radius: 50% !important;
-        width: 40px !important;
-        height: 40px !important;
+        width: 44px !important;
+        height: 44px !important;
+        min-width: 44px !important;
+        min-height: 44px !important;
         align-items: center !important;
         justify-content: center !important;
-        box-shadow: 0 2px 8px rgba(0,122,255,0.4) !important;
-    }
-    [data-testid="stSidebarCollapsedControl"] svg {
-        color: #ffffff !important;
-        fill: #ffffff !important;
-        width: 20px !important;
-        height: 20px !important;
+        box-shadow: 0 2px 12px rgba(0,122,255,0.5) !important;
+        border: none !important;
     }
 
-    /* 4. スマホ用の追加対応（画面幅768px以下） */
+    /* トグルボタン内のアイコン */
+    [data-testid="stSidebarCollapsedControl"] svg,
+    [data-testid="collapsedControl"] svg,
+    button[kind="header"] svg {
+        color: #ffffff !important;
+        fill: #ffffff !important;
+        stroke: #ffffff !important;
+        width: 22px !important;
+        height: 22px !important;
+    }
+
+    /* 4. サイドバー自体が閉じているときもボタンだけは表示 */
+    [data-testid="stSidebar"][aria-expanded="false"] ~ * [data-testid="stSidebarCollapsedControl"],
+    [data-testid="stSidebar"][aria-expanded="false"] ~ * [data-testid="collapsedControl"] {
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+
+    /* 5. スマホ専用（768px以下）追加強化 */
     @media (max-width: 768px) {
-        [data-testid="stSidebarCollapsedControl"] {
+        [data-testid="stSidebarCollapsedControl"],
+        [data-testid="collapsedControl"],
+        button[kind="header"] {
             display: flex !important;
             visibility: visible !important;
+            opacity: 1 !important;
             top: 8px !important;
             left: 8px !important;
-            width: 44px !important;
-            height: 44px !important;
+            width: 48px !important;
+            height: 48px !important;
+            min-width: 48px !important;
+            min-height: 48px !important;
+            z-index: 9999999 !important;
         }
     }
 
-    /* 5. ヘッダー透明化 */
+    /* 6. ヘッダー透明化 */
     header {
         background-color: transparent !important;
     }
