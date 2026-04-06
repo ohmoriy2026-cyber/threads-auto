@@ -15,27 +15,201 @@ import urllib.parse
 from streamlit_local_storage import LocalStorage
 
 # ==========================================
-# 🎨 デザイナー設計：モダンUI
+
+# 🎨 ページ設定
+
 # ==========================================
-st.set_page_config(page_title="Threads Marketing Pro", layout="wide", initial_sidebar_state="expanded")
+
+st.set_page_config(page_title="Threads Marketing Pro", layout="wide", initial_sidebar_state="collapsed")
+
+
+
+# ページ状態の初期化
+
+if "current_page" not in st.session_state:
+
+    st.session_state["current_page"] = "1. ダッシュボード"
+
+
+
+page = st.session_state["current_page"]
+
+
+
+# ==========================================
+
+# 🧭 固定ナビゲーションバー（Streamlitボタン）
+
+# ==========================================
 
 st.markdown("""
+
 <style>
-    [data-testid="stHeaderActionElements"], [data-testid="stToolbar"], .stAppDeployButton, #MainMenu, footer { display: none !important; }
-    header { visibility: visible !important; background: transparent !important; }
-    .stApp { font-family: 'Helvetica Neue', Arial, sans-serif; }
-    [data-testid="stVerticalBlockBorderWrapper"] { 
-        border-radius: 12px; padding: 20px; margin-bottom: 15px; 
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: transform 0.2s ease;
+
+    .stApp {
+
+        font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+
     }
-    .stButton>button { 
-        background-color: #007AFF !important; color: #FFFFFF !important; font-weight: bold; 
-        border-radius: 8px; width: 100%; border: none; padding: 0.5rem 1rem;
+
+    [data-testid="stVerticalBlockBorderWrapper"] {
+
+        border-radius: 12px; padding: 20px; margin-bottom: 15px;
+
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+
     }
-    .stButton>button:hover { background-color: #0056b3 !important; }
+
     [data-testid="stMetricValue"] { font-size: 2rem !important; font-weight: 800 !important; color: #007AFF !important; }
+
+
+
+    /* 右上・GitHubリンク・サイドバー完全非表示 */
+
+    .stAppDeployButton,
+
+    [data-testid="stHeaderActionElements"],
+
+    [data-testid="stViewerBadge"],
+
+    [data-testid="stDecoration"],
+
+    [data-testid="stToolbar"],
+
+    [data-testid="stToolbarActions"],
+
+    [data-testid="stSidebarCollapsedControl"],
+
+    [data-testid="collapsedControl"],
+
+    [data-testid="stSidebar"],
+
+    a[href*="github.com"],
+
+    .stActionButton,
+
+    #MainMenu, header, footer {
+
+        display: none !important;
+
+        visibility: hidden !important;
+
+        width: 0 !important; height: 0 !important;
+
+        overflow: hidden !important;
+
+    }
+
+
+
+    /* ナビバー全体 */
+
+    [data-testid="stHorizontalBlock"].nav-bar {
+
+        position: fixed !important;
+
+        top: 0 !important; left: 0 !important; right: 0 !important;
+
+        z-index: 9999999 !important;
+
+        background: #ffffff !important;
+
+        border-bottom: 2px solid #007AFF !important;
+
+        box-shadow: 0 2px 12px rgba(0,0,0,0.08) !important;
+
+        padding: 4px 8px !important;
+
+    }
+
+
+
+    /* ナビボタン共通 */
+
+    div[data-testid="stHorizontalBlock"] > div > div > div > button {
+
+        background: transparent !important;
+
+        color: #444 !important;
+
+        border: none !important;
+
+        border-bottom: 3px solid transparent !important;
+
+        border-radius: 0 !important;
+
+        font-size: 12px !important;
+
+        font-weight: 600 !important;
+
+        padding: 8px 6px !important;
+
+        width: 100% !important;
+
+        box-shadow: none !important;
+
+        transition: all 0.2s !important;
+
+        white-space: nowrap !important;
+
+    }
+
+    div[data-testid="stHorizontalBlock"] > div > div > div > button:hover {
+
+        color: #007AFF !important;
+
+        border-bottom-color: #007AFF !important;
+
+        background: rgba(0,122,255,0.05) !important;
+
+    }
+
+
+
+    /* コンテンツをナビバー分下げる */
+
+    .main .block-container {
+
+        padding-top: 70px !important;
+
+        max-width: 100% !important;
+
+    }
+
 </style>
+
 """, unsafe_allow_html=True)
+
+
+
+# ナビボタン描画
+nav_pages = [
+    ("📊 ダッシュボード", "1. ダッシュボード"),
+    ("🛍 商品作成", "2. 商品作成＆予約"),
+    ("📈 分析", "3. エンゲージメント分析"),
+    ("⚙️ API設定", "4. API設定"),
+    ("📝 テンプレート", "5. テンプレート管理"),
+]
+
+
+
+cols = st.columns(len(nav_pages))
+
+for col, (label, page_name) in zip(cols, nav_pages):
+
+    # アクティブなボタンは色を変える
+
+    btn_label = f"**{label}**" if page == page_name else label
+
+    if col.button(btn_label, key=f"nav_{page_name}", use_container_width=True):
+
+        st.session_state["current_page"] = page_name
+
+        st.rerun()
+
+
+
+st.divider()
 
 # ==========================================
 # ⚙️ 関数群
