@@ -157,20 +157,31 @@ def create_affiliate_link(url, aff_id):
         long_aff_url = url
     return shorten_url(long_aff_url)
 
-# 💡 小文字の 'sheet' に修正
+# 💡 フォーマットによる誤判定を防ぎ、確実に直下へ追加するロジックに変更
 def save_to_sheets(sheet_id, g_json, row_data):
     if not sheet_id or not g_json: return False
     try:
         creds = Credentials.from_service_account_info(json.loads(g_json, strict=False), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
         client = gspread.authorize(creds)
         sheet = client.open_by_key(sheet_id).worksheet("sheet")
-        sheet.append_row(row_data)
+        
+        # 全データから「文字が入っている最後の行」を正確に見つけ出す
+        all_values = sheet.get_all_values()
+        next_row = 1
+        for i, row in enumerate(all_values):
+            if any(str(val).strip() for val in row):  # 空白以外の文字があるかチェック
+                next_row = i + 2
+                
+        # A〜J列のセルを直接ピンポイントで上書きする
+        cells = sheet.range(f"A{next_row}:J{next_row}")
+        for i, val in enumerate(row_data):
+            cells[i].value = str(val) if val is not None else ""
+        sheet.update_cells(cells)
         return True
     except Exception as e:
         st.error(f"スプレッドシート保存エラー: {e}")
         return False
 
-# 💡 小文字の 'sheet' に修正
 def get_sheet_data(sheet_id, g_json):
     try:
         creds = Credentials.from_service_account_info(json.loads(g_json, strict=False), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
@@ -186,13 +197,25 @@ def get_templates(sheet_id, g_json):
         return [{"title": row[0], "content": row[1]} for row in data[1:] if len(row) >= 2 and row[0]]
     except: return []
 
+# 💡 テンプレート保存側もピンポイント上書きに変更
 def save_template(sheet_id, g_json, title, content):
     try:
         creds = Credentials.from_service_account_info(json.loads(g_json, strict=False), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
         ss = gspread.authorize(creds).open_by_key(sheet_id)
         try: ws = ss.worksheet("テンプレート")
         except: ws = ss.add_worksheet(title="テンプレート", rows=100, cols=2); ws.append_row(["タイトル", "本文"])
-        ws.append_row([title, content]); return True
+        
+        all_values = ws.get_all_values()
+        next_row = 1
+        for i, row in enumerate(all_values):
+            if any(str(val).strip() for val in row):
+                next_row = i + 2
+                
+        cells = ws.range(f"A{next_row}:B{next_row}")
+        cells[0].value = str(title)
+        cells[1].value = str(content)
+        ws.update_cells(cells)
+        return True
     except: return False
 
 def get_threads_user_name(token):
@@ -307,7 +330,7 @@ elif page == "2. 商品作成＆予約":
                                 "",                        # F: 投稿チェック (空欄)
                                 "",                        # G: 投稿URL (空欄)
                                 dr,                        # H: Googleドライブ内の画像URL
-                                r_txt,                     # I: 返信コメント内容
+                                r_txt,                     # I: 返信コメント内容 (リプライ)
                                 f_img if f_img else ""     # J: 画像URL
                             ]
                             if save_to_sheets(api["sheet_id"], api["g_json"], row):
