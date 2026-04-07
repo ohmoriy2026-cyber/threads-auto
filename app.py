@@ -157,20 +157,24 @@ def create_affiliate_link(url, aff_id):
         long_aff_url = url
     return shorten_url(long_aff_url)
 
+# 💡 ここを 'sheet1' から 'sheet' に修正
 def save_to_sheets(sheet_id, g_json, row_data):
     if not sheet_id or not g_json: return False
     try:
         creds = Credentials.from_service_account_info(json.loads(g_json, strict=False), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
         client = gspread.authorize(creds)
-        sheet = client.open_by_key(sheet_id).sheet1
+        sheet = client.open_by_key(sheet_id).worksheet("sheet")
         sheet.append_row(row_data)
         return True
     except: return False
 
+# 💡 ここも 'sheet1' から 'sheet' に修正
 def get_sheet_data(sheet_id, g_json):
     try:
         creds = Credentials.from_service_account_info(json.loads(g_json, strict=False), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
-        return [dict(zip(data[0], row)) for row in gspread.authorize(creds).open_by_key(sheet_id).sheet1.get_all_values() if any(row)]
+        data = gspread.authorize(creds).open_by_key(sheet_id).worksheet("sheet").get_all_values()
+        if len(data) < 2: return []
+        return [dict(zip(data[0], row)) for row in data[1:] if any(row)]
     except: return []
 
 def get_templates(sheet_id, g_json):
@@ -274,12 +278,13 @@ elif page == "2. 商品作成＆予約":
 
         def show_final_ui(key, def_txt, def_url, def_img):
             uid = f"{key}_{st.session_state['gen_count']}"
-            with st.expander(f"✨ 投稿内容の確認・編集", expanded=True):
+            with st.expander(f"✨ 投稿確認", expanded=True):
                 ui = st.checkbox("🖼️ 画像あり", value=True, key=f"ui_{uid}")
-                dr = st.text_input("🔗 画像URL", value=def_img if def_img else "", key=f"dr_{uid}")
+                dr = st.text_input("🔗 Googleドライブの画像URLを入力", value=def_img if def_img else "", key=f"dr_{uid}")
                 m_txt = st.text_area("本文", value=def_txt, height=150, key=f"mt_{uid}")
                 r_txt = st.text_area("リプライ", value=f"▼ 詳細はこちら\n{def_url}", height=80, key=f"rt_{uid}")
                 f_img = convert_drive_link(dr) if ui and dr else (def_img if ui else None)
+                
                 c1, c2 = st.columns(2)
                 if c1.button("🚀 今すぐ投稿", key=f"now_{uid}"):
                     with st.spinner("投稿中..."):
@@ -290,15 +295,27 @@ elif page == "2. 商品作成＆予約":
                 with c2:
                     dv = st.date_input("予約日", key=f"dv_{uid}"); tv = st.time_input("時間", key=f"tv_{uid}")
                     if st.button("🗓️ 予約に追加", key=f"res_{uid}"):
-                        row = ["", m_txt, dv.strftime('%Y/%m/%d'), str(tv.hour), str(tv.minute), "pending", "", "", r_txt, f_img if f_img else ""]
-                        if save_to_sheets(api["sheet_id"], api["g_json"], row):
-                            st.success("✅ 予約保存完了！")
+                        with st.spinner("保存中..."):
+                            row = [
+                                "",                        # A: NO (空欄)
+                                m_txt,                     # B: 本文
+                                dv.strftime('%Y/%m/%d'),   # C: 投稿日
+                                str(tv.hour),              # D: 時
+                                str(tv.minute),            # E: 分
+                                "",                        # F: 投稿チェック (空欄)
+                                "",                        # G: 投稿URL (空欄)
+                                dr,                        # H: Googleドライブ内の画像URL
+                                r_txt,                     # I: 返信コメント内容 (リプライ)
+                                f_img if f_img else ""     # J: 画像URL
+                            ]
+                            if save_to_sheets(api["sheet_id"], api["g_json"], row):
+                                st.success("✅ 予約保存完了！")
 
         with tab1:
-            genres = {"🏆 総合ランキング": "0", "👗 レディース服": "100371", "👔 メンズ服": "551177", "👠 靴": "558885", "👜 バッグ": "216129", "⌚ 腕時計": "558929", "💄 美容": "100939", "💊 ダイエット": "100143", "🏥 介護": "551169", "🍎 食品": "100227", "🍪 スイーツ": "551167", "🍹 飲料": "100316", "🍺 洋酒": "510915", "🍶 日本酒": "510901", "🛋 インテリア": "100804", "🍳 キッチン": "558944", "🚿 日用品": "215783", "🔌 家電": "562631", "📸 カメラ": "211742", "💻 パソコン": "100026", "📱 スマホ": "562637", "⚽ スポーツ": "101070", "⛳ ゴルフ": "101077", "🚗 車": "503190", "🧸 おもちゃ": "101164", "🎨 ホビー": "101165", "🎮 ゲーム": "101205", "🎸 楽器": "112493", "📚 本": "200376", "📀 CD・DVD": "101240", "🍼 ベビー": "100533", "🐱 ペット": "101213"}
+            genres = {"🏆 総合": "0", "👗 レディース": "100371", "👔 メンズ": "551177", "👠 靴": "558885", "👜 バッグ": "216129", "⌚ 腕時計": "558929", "💄 美容": "100939", "💊 健康": "100143", "🏥 介護": "551169", "🍎 食品": "100227", "🍪 スイーツ": "551167", "🍹 飲料": "100316", "🍺 洋酒": "510915", "🍶 日本酒": "510901", "🛋 インテリア": "100804", "🍳 キッチン": "558944", "🚿 日用品": "215783", "🔌 家電": "562631", "📸 カメラ": "211742", "💻 パソコン": "100026", "📱 スマホ": "562637", "⚽ スポーツ": "101070", "⛳ ゴルフ": "101077", "🚗 車": "503190", "🧸 おもちゃ": "101164", "🎨 ホビー": "101165", "🎮 ゲーム": "101205", "🎸 楽器": "112493", "📚 本": "200376", "📀 CD・DVD": "101240", "🍼 ベビー": "100533", "🐱 ペット": "101213"}
             sel_g = st.selectbox("ジャンルを選択", list(genres.keys()), key="sg_t1")
             if st.button("ランキング取得", key="br_t1"):
-                if "res1" in st.session_state: del st.session_state["res1"] # 💡 リセット
+                if "res1" in st.session_state: del st.session_state["res1"]
                 st.session_state["it1"] = get_rakuten_ranking(api["rakuten_id"], api["rakuten_key"], api["rakuten_aff_id"], genres[sel_g])
             if "it1" in st.session_state:
                 sel = []
@@ -333,7 +350,7 @@ elif page == "2. 商品作成＆予約":
         with tab2:
             url_in = st.text_input("楽天商品URL", key="u_t2")
             if st.button("情報取得", key="br_t2"):
-                if "res2" in st.session_state: del st.session_state["res2"] # 💡 リセット
+                if "res2" in st.session_state: del st.session_state["res2"]
                 res = requests.get(url_in, headers={'User-Agent': 'Mozilla/5.0'}).text
                 t_m = re.search(r'<title>(.*?)</title>', res, re.DOTALL); i_m = re.search(r'<meta\s+property="og:image"\s+content="(.*?)"', res)
                 st.session_state["it2"] = {"name": t_m.group(1)[:50] if t_m else "商品", "img": i_m.group(1) if i_m else "", "url": url_in}
@@ -357,12 +374,13 @@ elif page == "2. 商品作成＆予約":
             img_url_t3 = st.text_input("🔗 画像URL", key="u_t3")
             hint_t3 = st.text_input("商品名ヒント", key="h_t3")
             if st.button("✨ 本文を作成", key="gen_btn_t3"):
-                if "res3" in st.session_state: del st.session_state["res3"] # 💡 リセット
+                if "res3" in st.session_state: del st.session_state["res3"]
                 if img_url_t3:
                     with st.spinner("解析中..."):
                         st.session_state["gen_count"] += 1
                         st.session_state["res3"] = {"text": generate_post_text(hint_t3, "", "指定なし", "エモい", 50, "", "", api["gemini"], download_image(img_url_t3)), "url": img_url_t3}
                         st.rerun()
+                else: st.error("画像URLを入力してください。")
             if "res3" in st.session_state:
                 aff_t3 = st.text_input("🔗 アフィ商品URL", key="aff_t3")
                 show_final_ui("r3", st.session_state["res3"]["text"], create_affiliate_link(aff_t3, api["rakuten_aff_id"]), st.session_state["res3"]["url"])
@@ -370,7 +388,7 @@ elif page == "2. 商品作成＆予約":
 # --- 3. 分析 ---
 elif page == "3. エンゲージメント分析":
     st.title("🔍 分析")
-    if not api["threads"]: st.warning("API設定を完了してください。")
+    if not api["threads"]: st.warning("API設定を行ってください。")
     else:
         threads_data = get_threads_engagement(api["threads"])
         if threads_data:
@@ -386,10 +404,10 @@ elif page == "4. API設定":
     st.title("⚙️ API設定")
     with st.expander("👤 管理者モード (Secretsロード)", expanded=True):
         pw = st.text_input("合言葉", type="password", key="m_pw")
-        if st.button("一括ロードしてシステムに反映", key="b_load"):
+        if st.button("一括ロード", key="b_load"):
             if pw == st.secrets.get("master_password"):
                 st.session_state["api_keys"].update({"rakuten_id":st.secrets.get("rakuten_id",""),"rakuten_key":st.secrets.get("rakuten_key",""),"rakuten_aff_id":st.secrets.get("rakuten_aff_id",""),"gemini":st.secrets.get("gemini_key",""),"threads":st.secrets.get("threads_token",""),"sheet_id":st.secrets.get("sheet_id",""),"g_json":st.secrets.get("g_json","")})
-                st.success("✅ 管理者設定をロードしました！"); st.balloons(); time.sleep(2); st.rerun()
+                st.success("✅ ロードしました！"); st.rerun()
     with st.container(border=True):
         c1, c2 = st.columns(2)
         r_id = c1.text_input("楽天 App ID", value=api["rakuten_id"], type="password", key="ri")
@@ -401,13 +419,12 @@ elif page == "4. API設定":
         g_js = st.text_area("GCloud JSON", value=api["g_json"], height=100, key="gj")
         if st.button("✅ 設定を保存", key="b_save"):
             d = {"rakuten_id":r_id,"rakuten_key":r_key,"rakuten_aff_id":r_aff,"gemini":g_key,"threads":t_tok,"sheet_id":s_id,"g_json":g_js}
-            st.session_state["api_keys"].update(d); local_storage.setItem("threads_marketing_keys", d)
-            st.success("✅ 設定を保存完了！"); st.balloons(); st.rerun()
+            st.session_state["api_keys"].update(d); local_storage.setItem("threads_marketing_keys", d); st.success("🎉 保存完了！"); st.rerun()
 
 # --- 5. テンプレート管理 ---
 elif page == "5. テンプレート管理":
     st.title("📝 テンプレート管理")
-    if not api["sheet_id"]: st.warning("API設定を完了してください。")
+    if not api["sheet_id"]: st.warning("API設定を行ってください。")
     else:
         with st.form("tf"):
             t_ti = st.text_input("テンプレート名"); t_co = st.text_area("本文", height=150)
