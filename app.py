@@ -157,7 +157,7 @@ def create_affiliate_link(url, aff_id):
         long_aff_url = url
     return shorten_url(long_aff_url)
 
-# 💡 ここを 'sheet1' から 'sheet' に修正
+# 💡 小文字の 'sheet' に修正
 def save_to_sheets(sheet_id, g_json, row_data):
     if not sheet_id or not g_json: return False
     try:
@@ -166,9 +166,11 @@ def save_to_sheets(sheet_id, g_json, row_data):
         sheet = client.open_by_key(sheet_id).worksheet("sheet")
         sheet.append_row(row_data)
         return True
-    except: return False
+    except Exception as e:
+        st.error(f"スプレッドシート保存エラー: {e}")
+        return False
 
-# 💡 ここも 'sheet1' から 'sheet' に修正
+# 💡 小文字の 'sheet' に修正
 def get_sheet_data(sheet_id, g_json):
     try:
         creds = Credentials.from_service_account_info(json.loads(g_json, strict=False), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
@@ -305,7 +307,7 @@ elif page == "2. 商品作成＆予約":
                                 "",                        # F: 投稿チェック (空欄)
                                 "",                        # G: 投稿URL (空欄)
                                 dr,                        # H: Googleドライブ内の画像URL
-                                r_txt,                     # I: 返信コメント内容 (リプライ)
+                                r_txt,                     # I: 返信コメント内容
                                 f_img if f_img else ""     # J: 画像URL
                             ]
                             if save_to_sheets(api["sheet_id"], api["g_json"], row):
