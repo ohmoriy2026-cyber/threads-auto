@@ -223,12 +223,23 @@ def download_image(url):
         return Image.open(io.BytesIO(res.content))
     except: return None
 
+def clean_image_url(url):
+    """楽天サムネイルのサイズ指定パラメータを除去して高画質URLに変換"""
+    if not url: return url
+    url = re.sub(r'[?&]_ex=\d+x\d+', '', url)
+    return url
+
 def shorten_url(url):
     if not url or "http" not in url: return url
     try:
-        safe_url = urllib.parse.quote(url)
-        res = requests.get(f"http://tinyurl.com/api-create?url={safe_url}", timeout=10)
+        safe_url = urllib.parse.quote(url, safe="")
+        res = requests.get(f"https://tinyurl.com/api-create.php?url={safe_url}", timeout=10)
         if res.status_code == 200 and "tinyurl.com" in res.text:
+            return res.text.strip()
+    except: pass
+    try:
+        res = requests.get(f"https://is.gd/create.php?format=simple&url={urllib.parse.quote(url, safe='')}", timeout=10)
+        if res.status_code == 200 and "is.gd" in res.text:
             return res.text.strip()
     except: pass
     return url
@@ -360,16 +371,19 @@ def generate_post_text(item_name, price, target_str, tone, length, custom_prompt
 
 def post_to_threads(access_token, text, reply_to_id=None, image_url=None):
     try:
-        res = requests.post(
-            "https://graph.threads.net/v1.0/me/threads",
-            params={
-                "access_token": access_token,
-                "text": text,
-                "media_type": "IMAGE" if image_url else "TEXT",
-                "image_url": image_url if image_url else "",
-                "reply_to_id": reply_to_id if reply_to_id else ""
-            }
-        )
+        # 必須パラメータのみ先にセット
+        params = {
+            "access_token": access_token,
+            "text": text,
+            "media_type": "IMAGE" if image_url else "TEXT",
+        }
+        # 値がある場合のみ追加（空文字をAPIに送るとエラーになるため）
+        if image_url:
+            params["image_url"] = image_url
+        if reply_to_id:
+            params["reply_to_id"] = reply_to_id
+
+        res = requests.post("https://graph.threads.net/v1.0/me/threads", params=params)
         if res.status_code == 200:
             cid = res.json().get("id")
             time.sleep(5)
@@ -529,7 +543,7 @@ elif page == "2. 商品作成＆予約":
                     show_final_ui(
                         f"r1_{p['item']['itemCode']}", p["text"],
                         create_affiliate_link(p["item"]["itemUrl"], api["rakuten_aff_id"]),
-                        p["item"]["mediumImageUrls"][0]["imageUrl"]
+                        clean_image_url(p["item"]["mediumImageUrls"][0]["imageUrl"])
                     )
 
         with tab2:
@@ -567,7 +581,7 @@ elif page == "2. 商品作成＆予約":
                 show_final_ui(
                     "r2", st.session_state["res2"]["text"],
                     create_affiliate_link(st.session_state["it2"]["url"], api["rakuten_aff_id"]),
-                    st.session_state["it2"]["img"]
+                    clean_image_url(st.session_state["it2"]["img"])
                 )
 
         with tab3:
@@ -590,7 +604,7 @@ elif page == "2. 商品作成＆予約":
                 show_final_ui(
                     "r3", st.session_state["res3"]["text"],
                     create_affiliate_link(aff_t3, api["rakuten_aff_id"]),
-                    st.session_state["res3"]["url"]
+                    clean_image_url(st.session_state["res3"]["url"])
                 )
 
 # ==========================================
